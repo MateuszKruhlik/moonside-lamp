@@ -1,0 +1,23 @@
+# Xcode
+*.xcodeproj/xcuserdata/
+*.xcworkspace/xcuserdata/
+DerivedData/
+*.xcscmblueprint
+*.xccheckout
+build/
+
+# SPM
+.build/
+.swiftpm/
+Package.resolved
+
+# macOS
+.DS_Store
+*.swp
+*~
+
+# Secrets
+*.p12
+*.mobileprovision
+*.provisionprofile
+xcuserdata/matikkutik.xcuserdatad/
