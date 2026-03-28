@@ -10,23 +10,31 @@
 		24BA4DF8FE024FFD691B4481 /* MenuBarExtraAccess in Frameworks */ = {isa = PBXBuildFile; productRef = 084754A0398802823E5C6F83 /* MenuBarExtraAccess */; };
 		324A545FAD263370DD0D39A0 /* StateFileMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2A357690D370D53804C2773 /* StateFileMonitor.swift */; };
 		3AFEF326923E1610FD7A266B /* MoonsideBarApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5171C563D4EFC374833096B4 /* MoonsideBarApp.swift */; };
+		49470EBC8948346480096DA1 /* SidePanelController.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8034D25F744D0554BF0A330 /* SidePanelController.swift */; };
+		65933D5164057F21F85C840A /* HowItWorksView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE6CC0592FB30BB8E37A1467 /* HowItWorksView.swift */; };
 		7C7446DCA3A7954E297625EF /* MacControlCenterUI in Frameworks */ = {isa = PBXBuildFile; productRef = 9938C841A6AD05AA8DEAC5CE /* MacControlCenterUI */; };
 		8E8803D479020129B3638E61 /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD02FC845877611C670D300E /* AppState.swift */; };
 		B0D45BFB391E8821E47C9309 /* LaunchAtLogin in Frameworks */ = {isa = PBXBuildFile; productRef = D91EADF9B4652376A13D9149 /* LaunchAtLogin */; };
 		BE007CD47D5237ED60BFD642 /* BluetoothManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6EC71CB9409945A4A7BA8882 /* BluetoothManager.swift */; };
+		DC4C400BC55F13664FF4C080 /* SetupWizardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0896713ADB80A154EF03FA8E /* SetupWizardView.swift */; };
 		EA7AF0DCECE3F9C084B5391D /* Defaults in Frameworks */ = {isa = PBXBuildFile; productRef = 175199D8940476C4E28D5FD0 /* Defaults */; };
 		F2ACE6E87957FD927A0471CD /* MenuBarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8EADDB7DDC45BF530EFC4CC9 /* MenuBarView.swift */; };
+		F88EBCFC5FF8853FB26C00B1 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 134105D4478825D35FF35D07 /* Assets.xcassets */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		0896713ADB80A154EF03FA8E /* SetupWizardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SetupWizardView.swift; sourceTree = "<group>"; };
+		134105D4478825D35FF35D07 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		437C35F38A5580CDB3403D54 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		5171C563D4EFC374833096B4 /* MoonsideBarApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoonsideBarApp.swift; sourceTree = "<group>"; };
 		6EC71CB9409945A4A7BA8882 /* BluetoothManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BluetoothManager.swift; sourceTree = "<group>"; };
 		8EADDB7DDC45BF530EFC4CC9 /* MenuBarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarView.swift; sourceTree = "<group>"; };
 		AD02FC845877611C670D300E /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppState.swift; sourceTree = "<group>"; };
 		B2A357690D370D53804C2773 /* StateFileMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StateFileMonitor.swift; sourceTree = "<group>"; };
+		C8034D25F744D0554BF0A330 /* SidePanelController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidePanelController.swift; sourceTree = "<group>"; };
 		E235F74767F0620363AE937D /* MoonsideBar.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MoonsideBar.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		E760A0DD50E7072540BD593E /* MoonsideBar.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = MoonsideBar.entitlements; sourceTree = "<group>"; };
+		EE6CC0592FB30BB8E37A1467 /* HowItWorksView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HowItWorksView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -64,11 +72,15 @@
 			isa = PBXGroup;
 			children = (
 				AD02FC845877611C670D300E /* AppState.swift */,
+				134105D4478825D35FF35D07 /* Assets.xcassets */,
 				6EC71CB9409945A4A7BA8882 /* BluetoothManager.swift */,
+				EE6CC0592FB30BB8E37A1467 /* HowItWorksView.swift */,
 				437C35F38A5580CDB3403D54 /* Info.plist */,
 				8EADDB7DDC45BF530EFC4CC9 /* MenuBarView.swift */,
 				E760A0DD50E7072540BD593E /* MoonsideBar.entitlements */,
 				5171C563D4EFC374833096B4 /* MoonsideBarApp.swift */,
+				0896713ADB80A154EF03FA8E /* SetupWizardView.swift */,
+				C8034D25F744D0554BF0A330 /* SidePanelController.swift */,
 				B2A357690D370D53804C2773 /* StateFileMonitor.swift */,
 			);
 			path = MoonsideBar;
@@ -82,6 +94,7 @@
 			buildConfigurationList = 2D0EA688E10FA0BBB5A79E1F /* Build configuration list for PBXNativeTarget "MoonsideBar" */;
 			buildPhases = (
 				04D67F919C38319328FC313C /* Sources */,
+				E2E2DC2A75A545FC3B630F5E /* Resources */,
 				3CFD786EA55EC09C370FCE8E /* Frameworks */,
 			);
 			buildRules = (
@@ -135,6 +148,17 @@
 		};
 /* End PBXProject section */
 
+/* Begin PBXResourcesBuildPhase section */
+		E2E2DC2A75A545FC3B630F5E /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				F88EBCFC5FF8853FB26C00B1 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
 /* Begin PBXSourcesBuildPhase section */
 		04D67F919C38319328FC313C /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
@@ -142,8 +166,11 @@
 			files = (
 				8E8803D479020129B3638E61 /* AppState.swift in Sources */,
 				BE007CD47D5237ED60BFD642 /* BluetoothManager.swift in Sources */,
+				65933D5164057F21F85C840A /* HowItWorksView.swift in Sources */,
 				F2ACE6E87957FD927A0471CD /* MenuBarView.swift in Sources */,
 				3AFEF326923E1610FD7A266B /* MoonsideBarApp.swift in Sources */,
+				DC4C400BC55F13664FF4C080 /* SetupWizardView.swift in Sources */,
+				49470EBC8948346480096DA1 /* SidePanelController.swift in Sources */,
 				324A545FAD263370DD0D39A0 /* StateFileMonitor.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -155,6 +182,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ALLOW_ENTITLEMENTS_MODIFICATION = YES;
 				CODE_SIGN_ENTITLEMENTS = MoonsideBar/MoonsideBar.entitlements;
 				CODE_SIGN_IDENTITY = "-";
 				COMBINE_HIDPI_IMAGES = YES;
@@ -298,6 +326,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ALLOW_ENTITLEMENTS_MODIFICATION = YES;
 				CODE_SIGN_ENTITLEMENTS = MoonsideBar/MoonsideBar.entitlements;
 				CODE_SIGN_IDENTITY = "-";
 				COMBINE_HIDPI_IMAGES = YES;

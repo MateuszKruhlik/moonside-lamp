@@ -21,3 +21,8 @@ Package.resolved
 *.mobileprovision
 *.provisionprofile
 xcuserdata/matikkutik.xcuserdatad/
+
+# Development assets
+capture/
+icons/
+PLAN.md

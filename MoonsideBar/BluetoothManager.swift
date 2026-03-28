@@ -1,5 +1,6 @@
 import AppKit
 import CoreBluetooth
+import Defaults
 import Foundation
 
 final class BluetoothManager: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
@@ -8,7 +9,6 @@ final class BluetoothManager: NSObject, CBCentralManagerDelegate, CBPeripheralDe
 
     static let nusServiceUUID = CBUUID(string: "6E400001-B5A3-F393-E0A9-E50E24DCCA9E")
     static let nusRXCharUUID = CBUUID(string: "6E400002-B5A3-F393-E0A9-E50E24DCCA9E")
-    static let knownPeripheralUUID = UUID(uuidString: "REMOVED")!
 
     // MARK: - Callbacks
 
@@ -22,13 +22,14 @@ final class BluetoothManager: NSObject, CBCentralManagerDelegate, CBPeripheralDe
     private var retryCount = 0
     private let maxRetries = 10
     private var retryTimer: Timer?
+    private var scanTimeoutTimer: Timer?
     private var commandQueue: [String] = []
 
     // MARK: - Init
 
     override init() {
         super.init()
-        centralManager = CBCentralManager(delegate: self, queue: nil)
+        centralManager = CBCentralManager(delegate: self, queue: DispatchQueue.main)
         setupSleepWakeNotifications()
     }
 
@@ -50,17 +51,43 @@ final class BluetoothManager: NSObject, CBCentralManagerDelegate, CBPeripheralDe
     func connect() {
         guard centralManager.state == .poweredOn else { return }
 
-        // Try to retrieve known peripheral first (faster than scanning)
-        let known = centralManager.retrievePeripherals(withIdentifiers: [Self.knownPeripheralUUID])
-        if let p = known.first {
+        // 1. Try saved UUID (instant reconnect, no scan needed)
+        let savedUUID = Defaults[.deviceUUID]
+        if let uuid = UUID(uuidString: savedUUID), !savedUUID.isEmpty {
+            let known = centralManager.retrievePeripherals(withIdentifiers: [uuid])
+            if let p = known.first {
+                peripheral = p
+                p.delegate = self
+                centralManager.connect(p)
+                onConnectionStatusChanged?(.connecting)
+                return
+            }
+        }
+
+        // 2. Check if already connected (e.g. by another app)
+        let connected = centralManager.retrieveConnectedPeripherals(withServices: [Self.nusServiceUUID])
+        if let p = connected.first(where: { $0.name?.hasPrefix("MOONSIDE") == true }) {
             peripheral = p
             p.delegate = self
             centralManager.connect(p)
             onConnectionStatusChanged?(.connecting)
-        } else {
-            // Fall back to scanning
-            centralManager.scanForPeripherals(withServices: [Self.nusServiceUUID])
-            onConnectionStatusChanged?(.connecting)
+            Defaults[.deviceUUID] = p.identifier.uuidString
+            return
+        }
+
+        // 3. Scan without service filter — Moonside doesn't advertise NUS UUID
+        centralManager.scanForPeripherals(withServices: nil, options: [
+            CBCentralManagerScanOptionAllowDuplicatesKey: false
+        ])
+        onConnectionStatusChanged?(.connecting)
+        scanTimeoutTimer?.invalidate()
+        scanTimeoutTimer = Timer.scheduledTimer(withTimeInterval: 15, repeats: false) { [weak self] _ in
+            guard let self else { return }
+            self.centralManager.stopScan()
+            if self.peripheral?.state != .connected {
+                self.onConnectionStatusChanged?(.disconnected)
+                self.scheduleRetry()
+            }
         }
     }
 
@@ -71,6 +98,21 @@ final class BluetoothManager: NSObject, CBCentralManagerDelegate, CBPeripheralDe
             centralManager.cancelPeripheralConnection(p)
         }
         onConnectionStatusChanged?(.disconnected)
+    }
+
+    func manualReconnect() {
+        retryTimer?.invalidate()
+        retryTimer = nil
+        retryCount = 0
+        if let p = peripheral {
+            centralManager.cancelPeripheralConnection(p)
+        }
+        rxCharacteristic = nil
+        peripheral = nil
+        onConnectionStatusChanged?(.connecting)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+            self?.connect()
+        }
     }
 
     // MARK: - Sleep/Wake
@@ -127,9 +169,12 @@ final class BluetoothManager: NSObject, CBCentralManagerDelegate, CBPeripheralDe
     // MARK: - CBCentralManagerDelegate
 
     func centralManagerDidUpdateState(_ central: CBCentralManager) {
-        if central.state == .poweredOn {
+        switch central.state {
+        case .poweredOn:
             connect()
-        } else {
+        case .unauthorized:
+            onConnectionStatusChanged?(.unauthorized)
+        default:
             onConnectionStatusChanged?(.disconnected)
         }
     }
@@ -141,10 +186,14 @@ final class BluetoothManager: NSObject, CBCentralManagerDelegate, CBPeripheralDe
         rssi RSSI: NSNumber
     ) {
         if let name = peripheral.name, name.hasPrefix("MOONSIDE") {
+            scanTimeoutTimer?.invalidate()
+            scanTimeoutTimer = nil
             self.peripheral = peripheral
             peripheral.delegate = self
             central.stopScan()
             central.connect(peripheral)
+            // Save UUID for faster reconnect next time
+            Defaults[.deviceUUID] = peripheral.identifier.uuidString
         }
     }
 
