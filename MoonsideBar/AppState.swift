@@ -467,8 +467,8 @@ final class AppState {
             // #831100 → #011D57, Blue Lava effect
             themeCmd = BLECommand.theme("LAVA1", 131, 17, 0, 1, 29, 87)
         case .codex:
-            // #10A37F → #005032, Green Lava effect
-            themeCmd = BLECommand.theme("LAVA1", 16, 163, 127, 0, 80, 50)
+            // #450D59 → #11053B, Purple Lava effect
+            themeCmd = BLECommand.theme("LAVA1", 69, 13, 89, 17, 5, 59)
         }
 
         bluetoothManager?.send(BLECommand.ledOn)
@@ -513,10 +513,10 @@ final class AppState {
         .idle: [BLECommand.ledOn, BLECommand.color(255, 230, 200), BLECommand.brightness(50)],
         .working: [BLECommand.ledOn, BLECommand.theme("BEAT2", 88, 51, 0, 131, 17, 0)],
         .workingAG: [BLECommand.ledOn, BLECommand.theme("BEAT2", 131, 17, 0, 1, 29, 87)],
-        .workingCX: [BLECommand.ledOn, BLECommand.theme("BEAT2", 16, 163, 127, 0, 80, 50)],
+        .workingCX: [BLECommand.ledOn, BLECommand.theme("BEAT2", 69, 13, 89, 17, 5, 59)],
         .inputCC: [BLECommand.ledOn, BLECommand.theme("LAVA1", 88, 51, 0, 131, 17, 0)],
         .inputAG: [BLECommand.ledOn, BLECommand.theme("LAVA1", 131, 17, 0, 1, 29, 87)],
-        .inputCX: [BLECommand.ledOn, BLECommand.theme("LAVA1", 16, 163, 127, 0, 80, 50)],
+        .inputCX: [BLECommand.ledOn, BLECommand.theme("LAVA1", 69, 13, 89, 17, 5, 59)],
         .off: [BLECommand.ledOff],
     ]
 

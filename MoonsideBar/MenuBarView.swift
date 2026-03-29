@@ -67,8 +67,8 @@ enum AgentColors {
     static let claudeCode2 = Color(red: 243/255, green: 159/255, blue: 132/255)  // #F39F84
     static let antigravity1 = Color(red: 29/255, green: 117/255, blue: 236/255)  // #1D75EC
     static let antigravity2 = Color(red: 128/255, green: 185/255, blue: 255/255) // #80B9FF
-    static let codex1 = Color(red: 16/255, green: 163/255, blue: 127/255)        // #10A37F
-    static let codex2 = Color(red: 111/255, green: 211/255, blue: 181/255)       // #6FD3B5
+    static let codex1 = Color(red: 69/255, green: 13/255, blue: 89/255)          // #450D59
+    static let codex2 = Color(red: 17/255, green: 5/255, blue: 59/255)          // #11053B
 }
 
 // MARK: - Agent Icon Names
@@ -680,21 +680,24 @@ struct ColorsCard: View {
 
     private var recentColorsSection: some View {
         let colors = appState.recentColors
-        let row1 = Array(colors.prefix(6))
-        let row2 = colors.count > 6 ? Array(colors.dropFirst(6).prefix(6)) : []
+        let rows = stride(from: 0, to: colors.count, by: 6).map {
+            Array(colors[$0..<min($0 + 6, colors.count)])
+        }
 
-        return VStack(spacing: 8) {
-            HStack(spacing: 4) {
-                ForEach(Array(row1.enumerated()), id: \.offset) { _, color in
-                    recentDot(color: color)
-                        .frame(maxWidth: .infinity)
-                }
-            }
-            if !row2.isEmpty {
-                HStack(spacing: 4) {
-                    ForEach(Array(row2.enumerated()), id: \.offset) { _, color in
+        return VStack(spacing: 18) {
+            ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
+                HStack {
+                    ForEach(Array(row.enumerated()), id: \.offset) { _, color in
                         recentDot(color: color)
-                            .frame(maxWidth: .infinity)
+                    }
+                    // Fill remaining slots to keep layout even
+                    if row.count < 6 {
+                        ForEach(0..<(6 - row.count), id: \.self) { _ in
+                            Circle()
+                                .fill(Color.clear)
+                                .frame(width: 30, height: 30)
+                                .frame(maxWidth: .infinity)
+                        }
                     }
                 }
             }
@@ -706,16 +709,17 @@ struct ColorsCard: View {
         Button {
             applyColor(color, hex: color.hexString)
         } label: {
-            RoundedRectangle(cornerRadius: 7)
+            Circle()
                 .fill(color)
-                .frame(height: 27)
+                .frame(width: 30, height: 30)
                 .overlay(
                     selectedGridColor == color
-                        ? RoundedRectangle(cornerRadius: 5)
+                        ? Circle()
                             .stroke(.white, lineWidth: 2)
-                            .padding(3)
+                            .padding(4)
                         : nil
                 )
+                .frame(maxWidth: .infinity)
         }
         .buttonStyle(.plain)
     }
