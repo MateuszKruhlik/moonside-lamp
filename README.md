@@ -46,7 +46,7 @@ That's it. The lamp now reacts to your AI agent in real time.
 | Agent | Color | Setup Method |
 |-------|-------|-------------|
 | **Claude Code** | Orange | Hook script + `settings.json` hooks |
-| **Codex** (OpenAI) | Green | Hook script + `hooks.json` + `config.toml` |
+| **Codex** (OpenAI) | Purple | Hook script + `hooks.json` + `config.toml` |
 | **Antigravity** (Gemini) | Blue | Lamp instructions in `GEMINI.md` |
 
 ### One-Click Setup
@@ -65,10 +65,10 @@ Click **Setup** on any agent card. The wizard handles everything:
 |-------|-------------|-------------|------|
 | Idle | `idle` | Warm white solid | Agent ready, no active task |
 | Working (Claude) | `working` | Orange BEAT2 pulse | Claude Code is processing |
-| Working (Codex) | `working_cx` | Green BEAT2 pulse | Codex is processing |
+| Working (Codex) | `working_cx` | Purple BEAT2 pulse | Codex is processing |
 | Working (Gemini) | `working_ag` | Blue BEAT2 pulse | Antigravity is processing |
 | Input (Claude) | `input_cc` | Orange LAVA1 glow | Claude Code needs your input |
-| Input (Codex) | `input_cx` | Green LAVA1 glow | Codex needs your input |
+| Input (Codex) | `input_cx` | Purple LAVA1 glow | Codex needs your input |
 | Input (Gemini) | `input_ag` | Blue LAVA1 glow | Antigravity needs your input |
 | Off | `off` | LED off | Session ended |
 
