@@ -127,9 +127,14 @@ Moonside Lamp One uses Nordic UART Service (NUS) with ASCII commands:
 
 ## Credits
 
+### Special thanks
+
+[**bobek-balinek/claude-lamp**](https://github.com/bobek-balinek/claude-lamp) — the original proof of concept that made this project possible. It cracked the BLE connection to Moonside Lamp One, figured out the Nordic UART command structure, and proved the core idea works. MoonsideBar is built on that foundation — the native macOS app, the multi-agent integration, and all the UI came after.
+
+### Also
+
 - BLE protocol reverse engineering: [TheGreyDiamond](https://thegreydiamond.de/blog/2022/10/10/reverse-engineering-moonside-lighthouse/)
-- Original Claude lamp concept: [bobek-balinek/claude-lamp](https://github.com/bobek-balinek/claude-lamp)
-- UI: [MacControlCenterUI](https://github.com/orchetect/MacControlCenterUI) by orchetect
+- UI inspiration: [MacControlCenterUI](https://github.com/orchetect/MacControlCenterUI) by orchetect
 
 ## License
 
