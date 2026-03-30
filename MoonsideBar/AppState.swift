@@ -470,8 +470,8 @@ final class AppState {
             // #583300 → #831100, Blue Lava effect
             themeCmd = BLECommand.theme("LAVA1", 88, 51, 0, 131, 17, 0)
         case .antigravity:
-            // #831100 → #011D57, Blue Lava effect
-            themeCmd = BLECommand.theme("LAVA1", 131, 17, 0, 1, 29, 87)
+            // #011D57 → #1D75EC, Blue Lava effect
+            themeCmd = BLECommand.theme("LAVA1", 1, 29, 87, 29, 117, 236)
         case .codex:
             // #450D59 → #11053B, Purple Lava effect
             themeCmd = BLECommand.theme("LAVA1", 69, 13, 89, 17, 5, 59)
@@ -518,10 +518,10 @@ final class AppState {
     static let stateCommands: [LampState: [String]] = [
         // .idle is handled dynamically in applyState() using the user's themeColor1
         .working: [BLECommand.ledOn, BLECommand.theme("BEAT2", 88, 51, 0, 131, 17, 0)],
-        .workingAG: [BLECommand.ledOn, BLECommand.theme("BEAT2", 131, 17, 0, 1, 29, 87)],
+        .workingAG: [BLECommand.ledOn, BLECommand.theme("BEAT2", 1, 29, 87, 29, 117, 236)],
         .workingCX: [BLECommand.ledOn, BLECommand.theme("BEAT2", 69, 13, 89, 17, 5, 59)],
         .inputCC: [BLECommand.ledOn, BLECommand.theme("LAVA1", 88, 51, 0, 131, 17, 0)],
-        .inputAG: [BLECommand.ledOn, BLECommand.theme("LAVA1", 131, 17, 0, 1, 29, 87)],
+        .inputAG: [BLECommand.ledOn, BLECommand.theme("LAVA1", 1, 29, 87, 29, 117, 236)],
         .inputCX: [BLECommand.ledOn, BLECommand.theme("LAVA1", 69, 13, 89, 17, 5, 59)],
         .off: [BLECommand.ledOff],
     ]
