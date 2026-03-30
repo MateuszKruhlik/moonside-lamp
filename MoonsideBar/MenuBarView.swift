@@ -464,6 +464,19 @@ struct MenuBarView: View {
                         .foregroundStyle(subtitleColor)
                 }
                 Spacer()
+
+                Button {
+                    if let theme = appState.selectedTheme {
+                        appState.resetThemeColors()
+                        appState.applyTheme(theme)
+                    }
+                } label: {
+                    Image(systemName: "arrow.2.circlepath")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(appState.selectedTheme != nil ? subtitleColor : subtitleColor.opacity(0.3))
+                }
+                .buttonStyle(.plain)
+                .disabled(appState.selectedTheme == nil)
             }
 
             ThinBarSlider(

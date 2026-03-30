@@ -279,9 +279,15 @@ final class AppState {
 
     func applyState(_ state: LampState) {
         currentState = state
-        guard let commands = Self.stateCommands[state] else { return }
-        for command in commands {
-            bluetoothManager?.send(command)
+        if state == .idle {
+            // Return to user's chosen flat color at current brightness
+            let rgb = themeColor1.rgbComponents
+            bluetoothManager?.send(BLECommand.ledOn)
+            bluetoothManager?.send(BLECommand.color(rgb.r, rgb.g, rgb.b))
+            bluetoothManager?.send(BLECommand.brightness(brightness))
+        } else {
+            guard let commands = Self.stateCommands[state] else { return }
+            for command in commands { bluetoothManager?.send(command) }
         }
         isLedOn = state != .off
         updateSleepPrevention(for: state)
@@ -510,7 +516,7 @@ final class AppState {
     // MARK: - State → BLE command mapping
 
     static let stateCommands: [LampState: [String]] = [
-        .idle: [BLECommand.ledOn, BLECommand.color(255, 230, 200), BLECommand.brightness(50)],
+        // .idle is handled dynamically in applyState() using the user's themeColor1
         .working: [BLECommand.ledOn, BLECommand.theme("BEAT2", 88, 51, 0, 131, 17, 0)],
         .workingAG: [BLECommand.ledOn, BLECommand.theme("BEAT2", 131, 17, 0, 1, 29, 87)],
         .workingCX: [BLECommand.ledOn, BLECommand.theme("BEAT2", 69, 13, 89, 17, 5, 59)],
