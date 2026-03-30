@@ -563,8 +563,9 @@ struct SetupWizardView: View {
 
     static let geminiMdContent = """
     # Desk Lamp Hook
+    Run `bash ~/.claude/moonside_hooks/moonside_hook.sh working_ag` when starting work on a task.
     Run `bash ~/.claude/moonside_hooks/moonside_hook.sh input_ag` before asking user a question.
-    Run `bash ~/.claude/moonside_hooks/moonside_hook.sh working_ag` when starting work after user responds.
+    Run `bash ~/.claude/moonside_hooks/moonside_hook.sh idle` when finished with a task or response.
     """
 
     static let codexHookScriptContent = """
