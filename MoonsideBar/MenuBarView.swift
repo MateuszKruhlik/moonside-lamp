@@ -602,7 +602,7 @@ struct ColorsCard: View {
                 } label: {
                     Text("Reset")
                         .font(.system(size: 11, weight: .medium, design: .monospaced))
-                        .foregroundStyle(subtitleColor)
+                        .foregroundStyle(.white)
                 }
                 .buttonStyle(.plain)
                 .disabled(appState.selectedTheme == nil)
