@@ -472,11 +472,12 @@ struct MenuBarView: View {
                     }
                 } label: {
                     Image(systemName: "arrow.2.circlepath")
-                        .font(.system(size: 13, weight: .medium))
-                        .foregroundStyle(appState.selectedTheme != nil ? subtitleColor : subtitleColor.opacity(0.3))
+                        .font(.system(size: 11, weight: .medium, design: .monospaced))
+                        .foregroundStyle(.white)
                 }
                 .buttonStyle(.plain)
                 .disabled(appState.selectedTheme == nil)
+                .opacity(appState.selectedTheme != nil ? 1 : 0.3)
             }
 
             ThinBarSlider(
