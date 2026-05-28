@@ -62,7 +62,7 @@ struct HowItWorksView: View {
             VStack(alignment: .leading, spacing: 6) {
                 featureRow("Claude Code", "orange pulse while processing, slow glow when waiting for you")
                 featureRow("Antigravity", "blue pulse while processing, slow glow when waiting for you")
-                featureRow("Codex", "green pulse while processing, slow glow when waiting for you")
+                featureRow("Codex", "purple pulse while processing, slow glow when waiting for you")
                 featureRow("Idle", "warm white — agent is ready")
                 featureRow("Off", "lamp turns off when the session ends")
             }
@@ -98,10 +98,10 @@ struct HowItWorksView: View {
             Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 6) {
                 stateRow(color: .orange, state: "working", desc: "Claude Code is processing")
                 stateRow(color: .blue, state: "working_ag", desc: "Antigravity is processing")
-                stateRow(color: .green, state: "working_cx", desc: "Codex is processing")
+                stateRow(color: .purple, state: "working_cx", desc: "Codex is processing")
                 stateRow(color: .orange.opacity(0.6), state: "input_cc", desc: "Claude Code needs your input")
                 stateRow(color: .blue.opacity(0.6), state: "input_ag", desc: "Antigravity needs your input")
-                stateRow(color: .green.opacity(0.6), state: "input_cx", desc: "Codex needs your input")
+                stateRow(color: .purple.opacity(0.6), state: "input_cx", desc: "Codex needs your input")
                 stateRow(color: Color(r: 255, g: 230, b: 200), state: "idle", desc: "Ready, no active task")
                 stateRow(color: .gray.opacity(0.3), state: "off", desc: "Lamp off")
             }
