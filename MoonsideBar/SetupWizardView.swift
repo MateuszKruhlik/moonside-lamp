@@ -191,10 +191,12 @@ struct SetupWizardView: View {
             steps = [
                 SetupStep(title: "Gemini CLI installed", status: .pending,
                           detail: "~/.gemini/ directory"),
+                SetupStep(title: "Hook script installed", status: .pending,
+                          detail: "~/.claude/moonside_hooks/moonside_ag_hook.sh"),
                 SetupStep(title: "Lamp instructions in GEMINI.md", status: .pending,
                           detail: "~/.gemini/GEMINI.md"),
                 SetupStep(title: "State file accessible", status: .pending,
-                          detail: "/tmp/moonside_cc (or _ag, _cx)"),
+                          detail: "/tmp/moonside_ag"),
             ]
         case .codex:
             steps = [
@@ -331,7 +333,7 @@ struct SetupWizardView: View {
             }
         }
 
-        // Step 2: Install AG hook script
+        // Step 2: Install AG hook script + shared per-session resolver
         updateStep(1, status: .checking)
         let hookDir = home + "/.claude/moonside_hooks"
         let agHookPath = hookDir + "/moonside_ag_hook.sh"
@@ -339,7 +341,11 @@ struct SetupWizardView: View {
             try fm.createDirectory(atPath: hookDir, withIntermediateDirectories: true)
             try Self.agHookScriptContent.write(toFile: agHookPath, atomically: true, encoding: .utf8)
             try fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: agHookPath)
-            updateStep(1, status: .installed, detail: "moonside_ag_hook.sh")
+            // Shared per-session aggregator (sourced by the hook) — same helper as cc/cx
+            let resolvePath = hookDir + "/moonside_resolve.sh"
+            try Self.resolveScriptContent.write(toFile: resolvePath, atomically: true, encoding: .utf8)
+            try fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: resolvePath)
+            updateStep(1, status: .installed, detail: "moonside_ag_hook.sh + resolver")
         } catch {
             updateStep(1, status: .failed, detail: "Failed: \(error.localizedDescription)")
         }
@@ -560,7 +566,7 @@ struct SetupWizardView: View {
     #!/usr/bin/env bash
     # Moonside per-session state aggregator (sourced helper — defines a function only).
     #
-    # Usage:  MS_SID=<session id> MS_CAT=<input|working|idle|end> moonside_resolve <cc|cx>
+    # Usage:  MS_SID=<session id> MS_CAT=<input|working|idle|end> moonside_resolve <cc|cx|ag>
     #
     # Each session writes its own file under /tmp/moonside_<agent>.d/. We then write
     # the highest-priority state across all live sessions (input > working > idle) to
@@ -619,6 +625,7 @@ struct SetupWizardView: View {
       case "$agent" in
         cc) case "$best" in input) tok=input_cc ;; working) tok=working    ;; idle) tok=idle ;; *) tok=off ;; esac ;;
         cx) case "$best" in input) tok=input_cx ;; working) tok=working_cx ;; idle) tok=idle ;; *) tok=off ;; esac ;;
+        ag) case "$best" in input) tok=input_ag ;; working) tok=working_ag ;; *) tok=idle ;; esac ;;
         *)  tok="$best" ;;
       esac
 
@@ -629,16 +636,26 @@ struct SetupWizardView: View {
 
     static let agHookScriptContent = """
     #!/usr/bin/env bash
-    # Moonside LED hook for Antigravity (Gemini).
-    # Usage: moonside_ag_hook.sh <working_ag|idle|input_ag>
-    # Always exits 0 to never block the caller.
-
-    set -e
+    # Moonside LED hook for Antigravity (Gemini) — per-session aware.
+    # Usage: moonside_ag_hook.sh <working_ag|input_ag|idle>
+    # Gemini passes no session id, so we key the per-session bucket on the
+    # controlling terminal (one tty per session) and fall back to "default"
+    # (degrades to single-session last-wins). Always exits 0.
 
     STATE="${1:-idle}"
 
-    # Antigravity writes to its own file — no conflicts with other agents
-    printf '%s' "$STATE" > /tmp/moonside_ag
+    # Per-session id from the controlling TTY (stable per terminal tab).
+    SID="$(ps -o tty= -p $$ 2>/dev/null | tr -d '[:space:]')"
+    case "$SID" in ""|"?"|"??") SID="default" ;; esac
+
+    case "$STATE" in
+      working_ag) CAT=working ;;
+      input_ag)   CAT=input ;;
+      *)          CAT=idle ;;
+    esac
+
+    source "$HOME/.claude/moonside_hooks/moonside_resolve.sh"
+    MS_SID="$SID" MS_CAT="$CAT" moonside_resolve ag
 
     exit 0
     """
