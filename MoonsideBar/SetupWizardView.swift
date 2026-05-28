@@ -249,15 +249,18 @@ struct SetupWizardView: View {
 
         if fm.fileExists(atPath: hookPath),
            let content = try? String(contentsOfFile: hookPath, encoding: .utf8),
-           content.contains("moonside_state") {
+           content.contains("moonside_resolve") {
             updateStep(1, status: .passed)
         } else {
             // Create directory and install hook
             do {
                 try fm.createDirectory(atPath: hooksDir, withIntermediateDirectories: true)
                 try Self.hookScriptContent.write(toFile: hookPath, atomically: true, encoding: .utf8)
-                // Make executable
                 try fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: hookPath)
+                // Shared per-session aggregator (sourced by the hook)
+                let resolvePath = hooksDir + "/moonside_resolve.sh"
+                try Self.resolveScriptContent.write(toFile: resolvePath, atomically: true, encoding: .utf8)
+                try fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: resolvePath)
                 updateStep(1, status: .installed, detail: "Hook script installed")
             } catch {
                 updateStep(1, status: .failed, detail: "Failed: \(error.localizedDescription)")
@@ -402,13 +405,17 @@ struct SetupWizardView: View {
 
         if fm.fileExists(atPath: hookPath),
            let content = try? String(contentsOfFile: hookPath, encoding: .utf8),
-           content.contains("moonside_state") {
+           content.contains("moonside_resolve") {
             updateStep(1, status: .passed)
         } else {
             do {
                 try fm.createDirectory(atPath: hooksDir, withIntermediateDirectories: true)
                 try Self.codexHookScriptContent.write(toFile: hookPath, atomically: true, encoding: .utf8)
                 try fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: hookPath)
+                // Shared per-session aggregator (sourced by the hook)
+                let resolvePath = hooksDir + "/moonside_resolve.sh"
+                try Self.resolveScriptContent.write(toFile: resolvePath, atomically: true, encoding: .utf8)
+                try fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: resolvePath)
                 updateStep(1, status: .installed, detail: "Hook script installed")
             } catch {
                 updateStep(1, status: .failed, detail: "Failed: \(error.localizedDescription)")
@@ -518,21 +525,107 @@ struct SetupWizardView: View {
 
     // MARK: - Bundled Content
 
-    static let hookScriptContent = """
+    static let hookScriptContent = #"""
     #!/usr/bin/env bash
-    # Moonside LED hook for Claude Code.
+    # Moonside LED hook for Claude Code (per-session aware).
     # Usage: moonside_hook.sh <working|idle|input_cc|off>
-    # Always exits 0 to never block the caller.
-
-    set -e
+    # Reads session_id from the hook JSON on stdin so concurrent Claude Code
+    # sessions don't clobber each other's lamp state. Always exits 0.
 
     STATE="${1:-idle}"
 
-    # Claude Code writes to its own file — no conflicts with other agents
-    printf '%s' "$STATE" > /tmp/moonside_cc
+    # Pull session_id from the hook payload (stdin is a pipe when Claude runs us).
+    SID="default"
+    if [ ! -t 0 ]; then
+      IFS= read -r -d '' INPUT 2>/dev/null || true
+      if [[ "$INPUT" =~ \"session_id\"[[:space:]]*:[[:space:]]*\"([^\"]+)\" ]]; then
+        SID="${BASH_REMATCH[1]}"
+      fi
+    fi
+
+    case "$STATE" in
+      working)  CAT=working ;;
+      input_cc) CAT=input ;;
+      off)      CAT=end ;;
+      *)        CAT=idle ;;
+    esac
+
+    source "$HOME/.claude/moonside_hooks/moonside_resolve.sh"
+    MS_SID="$SID" MS_CAT="$CAT" moonside_resolve cc
 
     exit 0
-    """
+    """#
+
+    static let resolveScriptContent = #"""
+    #!/usr/bin/env bash
+    # Moonside per-session state aggregator (sourced helper — defines a function only).
+    #
+    # Usage:  MS_SID=<session id> MS_CAT=<input|working|idle|end> moonside_resolve <cc|cx>
+    #
+    # Each session writes its own file under /tmp/moonside_<agent>.d/. We then write
+    # the highest-priority state across all live sessions (input > working > idle) to
+    # the single /tmp/moonside_<agent> file the MoonsideBar app watches. This stops
+    # concurrent sessions of one agent from clobbering each other (a finishing tab no
+    # longer drags the lamp to idle while another tab is still working).
+    #
+    # Written with bash builtins so the hot path forks no extra processes.
+
+    moonside_resolve() {
+      local agent="$1"
+      local sid="${MS_SID:-default}"
+      local cat="${MS_CAT:-idle}"
+      local dir="/tmp/moonside_${agent}.d"
+      local out="/tmp/moonside_${agent}"
+
+      # Sanitize the session id into a safe filename.
+      sid="${sid//[^A-Za-z0-9_-]/_}"
+      [ -n "$sid" ] || sid="default"
+
+      [ -d "$dir" ] || mkdir -p "$dir" 2>/dev/null
+
+      if [ "$cat" = "end" ]; then
+        rm -f "$dir/$sid" 2>/dev/null
+      else
+        printf '%s' "$cat" > "$dir/$sid" 2>/dev/null
+      fi
+
+      # Prune orphaned session files (e.g. a crashed session stuck on "working").
+      # Only on boundary events (idle/end), never on the per-tool hot path.
+      case "$cat" in
+        idle|end) find "$dir" -type f -mmin +1440 -delete 2>/dev/null ;;
+      esac
+
+      # Aggregate the highest-priority live state.
+      local f s had_input=0 had_working=0 had_idle=0
+      for f in "$dir"/*; do
+        [ -e "$f" ] || continue
+        s="$(<"$f")"
+        case "$s" in
+          input)   had_input=1 ;;
+          working) had_working=1 ;;
+          idle)    had_idle=1 ;;
+        esac
+      done
+
+      local best
+      if   [ "$had_input" = 1 ];   then best=input
+      elif [ "$had_working" = 1 ]; then best=working
+      elif [ "$had_idle" = 1 ];    then best=idle
+      else best=off
+      fi
+
+      # Emit the agent-specific token the app understands.
+      local tok
+      case "$agent" in
+        cc) case "$best" in input) tok=input_cc ;; working) tok=working    ;; idle) tok=idle ;; *) tok=off ;; esac ;;
+        cx) case "$best" in input) tok=input_cx ;; working) tok=working_cx ;; idle) tok=idle ;; *) tok=off ;; esac ;;
+        *)  tok="$best" ;;
+      esac
+
+      printf '%s' "$tok" > "$out" 2>/dev/null
+      return 0
+    }
+    """#
 
     static let agHookScriptContent = """
     #!/usr/bin/env bash
@@ -574,7 +667,7 @@ struct SetupWizardView: View {
           {"matcher": "ExitPlanMode", "hooks": [{"type": "command", "command": "bash ~/.claude/moonside_hooks/moonside_hook.sh input_cc"}]}
         ],
         "PostToolUse": [
-          {"matcher": "AskUserQuestion", "hooks": [{"type": "command", "command": "bash ~/.claude/moonside_hooks/moonside_hook.sh input_cc"}]}
+          {"hooks": [{"type": "command", "command": "bash ~/.claude/moonside_hooks/moonside_hook.sh working"}]}
         ],
         "PermissionRequest": [{"hooks": [{"type": "command", "command": "bash ~/.claude/moonside_hooks/moonside_hook.sh input_cc"}]}],
         "Notification": [
@@ -593,51 +686,41 @@ struct SetupWizardView: View {
     Run `bash ~/.claude/moonside_hooks/moonside_ag_hook.sh idle` when finished with a task or response.
     """
 
-    static let codexHookScriptContent = """
+    static let codexHookScriptContent = #"""
     #!/usr/bin/env bash
-    # Moonside LED hook for OpenAI Codex.
+    # Moonside LED hook for OpenAI Codex (per-session aware).
     # Codex hooks receive JSON on stdin and return JSON on stdout.
-    # Always exits 0 to never block the caller.
+    # Always exits 0 so it can never block Codex.
 
-    set -e
+    IFS= read -r -d '' INPUT 2>/dev/null || true
 
-    STATE_FILE="/tmp/moonside_cx"
+    EVENT=""
+    if [[ "$INPUT" =~ \"hook_event_name\"[[:space:]]*:[[:space:]]*\"([^\"]+)\" ]]; then
+      EVENT="${BASH_REMATCH[1]}"
+    fi
 
-    # Read stdin (Codex passes JSON with hook_event_name)
-    INPUT="$(cat)"
-
-    # Extract event name from JSON
-    EVENT="$(echo "$INPUT" | grep -o '"hook_event_name":"[^"]*"' | head -1 | cut -d'"' -f4)"
+    # Codex's session field name isn't guaranteed; try the common keys, else fall
+    # back to a shared bucket (degrades to single-session behaviour, never breaks).
+    SID="default"
+    if [[ "$INPUT" =~ \"session_id\"[[:space:]]*:[[:space:]]*\"([^\"]+)\" ]]; then
+      SID="${BASH_REMATCH[1]}"
+    elif [[ "$INPUT" =~ \"conversation_id\"[[:space:]]*:[[:space:]]*\"([^\"]+)\" ]]; then
+      SID="${BASH_REMATCH[1]}"
+    fi
 
     case "$EVENT" in
-      SessionStart)
-        printf '%s' "idle" > "$STATE_FILE"
-        echo ""
-        ;;
-      UserPromptSubmit)
-        printf '%s' "working_cx" > "$STATE_FILE"
-        echo ""
-        ;;
-      PreToolUse)
-        printf '%s' "working_cx" > "$STATE_FILE"
-        echo ""
-        ;;
-      PostToolUse)
-        printf '%s' "working_cx" > "$STATE_FILE"
-        echo ""
-        ;;
-      Stop)
-        printf '%s' "input_cx" > "$STATE_FILE"
-        echo ""
-        ;;
-      *)
-        printf '%s' "idle" > "$STATE_FILE"
-        echo ""
-        ;;
+      SessionStart)                          CAT=idle ;;
+      UserPromptSubmit|PreToolUse|PostToolUse) CAT=working ;;
+      Stop)                                  CAT=input ;;
+      *)                                     CAT=idle ;;
     esac
 
+    source "$HOME/.claude/moonside_hooks/moonside_resolve.sh"
+    MS_SID="$SID" MS_CAT="$CAT" moonside_resolve cx
+
+    echo ""
     exit 0
-    """
+    """#
 
     static let codexHooksJSON = """
     {
