@@ -152,17 +152,22 @@ struct HowItWorksView: View {
         VStack(alignment: .leading, spacing: 10) {
             sectionHeader("For developers")
 
-            Text("Any tool can control the lamp by writing to /tmp/moonside_state. MoonsideBar watches this file and reacts immediately.")
+            Text("Any tool can control the lamp by writing a state token to a per-agent file — /tmp/moonside_cc (Claude), /tmp/moonside_ag (Gemini), or /tmp/moonside_cx (Codex). MoonsideBar watches all three and reacts immediately.")
                 .font(.system(size: 12, design: .monospaced))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
-            Text("printf 'working' > /tmp/moonside_state")
+            Text("printf 'working' > /tmp/moonside_cc")
                 .font(.system(size: 11, weight: .medium, design: .monospaced))
                 .foregroundStyle(.primary)
                 .padding(8)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(Color.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 6))
+
+            Text("Claude Code and Codex hooks are per-session aware: concurrent sessions each write their own bucket, and the highest-priority state (input > working > idle > off) wins — so one finishing tab won't reset the lamp while another is still working.")
+                .font(.system(size: 12, design: .monospaced))
+                .foregroundStyle(.tertiary)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 
