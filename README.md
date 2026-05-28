@@ -22,7 +22,7 @@ Your Moonside lamp becomes the **out-of-screen status light** for whichever AI a
 - **Monocle-style side panel** — frosted glass, slides from the right edge (Notification Center-inspired)
 - **BLE control** — ON/OFF, brightness (0–120), custom RGB
 - **20 built-in themes** — Flat, BEAT, WAVE, GRADIENT, RAINBOW, FIRE, LAVA, TWINKLE, …
-- **AI agent integration** — watches `/tmp/moonside_state` and reacts in real time
+- **AI agent integration** — watches per-agent state files (`/tmp/moonside_cc`, `_ag`, `_cx`) and reacts in real time
 - **One-click setup wizard** — Claude Code hooks, Codex hooks, or Gemini `GEMINI.md` instructions, installed automatically
 - **Sleep prevention** — blocks idle sleep while an agent is processing (keeps BLE alive, keeps feedback visible)
 - **Auto / Manual mode** — Agentic hooks drive the lamp, or override for direct control
@@ -55,6 +55,8 @@ Your Moonside lamp becomes the **out-of-screen status light** for whichever AI a
 | Input (Codex) | `input_cx` | Purple LAVA1 glow | Codex needs input |
 | Input (Gemini) | `input_ag` | Blue LAVA1 glow | Antigravity needs input |
 | Off | `off` | LED off | Session ended |
+
+> **File content** is the value written to the agent's own state file — `/tmp/moonside_cc` (Claude), `/tmp/moonside_ag` (Gemini), `/tmp/moonside_cx` (Codex). The app watches all three and shows the highest-priority state across them.
 
 ---
 
@@ -89,15 +91,25 @@ The lamp now reacts in real time.
 
 ## Custom Integration
 
-Any tool can drive the lamp by writing to `/tmp/moonside_state`:
+Any tool can drive the lamp by writing a state token to a per-agent file — `/tmp/moonside_cc` (Claude / 🟠), `/tmp/moonside_ag` (Gemini / 🔵), or `/tmp/moonside_cx` (Codex / 🟣):
 
 ```bash
-printf 'working' > /tmp/moonside_state
-printf 'input_cc' > /tmp/moonside_state
-printf 'off' > /tmp/moonside_state
+printf 'working'  > /tmp/moonside_cc   # orange pulse
+printf 'input_cc' > /tmp/moonside_cc   # orange waiting glow
+printf 'off'      > /tmp/moonside_cc   # LED off
 ```
 
-MoonsideBar watches the file and reacts immediately. Valid values are in the state table above.
+MoonsideBar watches all three files and reacts immediately, applying the highest-priority state across them. Valid values are in the state table above.
+
+### Multi-session aggregation
+
+The Claude Code and Codex hooks are **per-session aware**, so concurrent sessions don't clobber each other. Each session writes its own bucket under `/tmp/moonside_<agent>.d/<session_id>`, and a shared helper (`moonside_resolve.sh`) collapses every live session into the single watched file, picking the highest-priority state:
+
+```
+input  >  working  >  idle  >  off
+```
+
+So a tab that finishes won't drag the lamp to idle while another tab is still working — the lamp always reflects whichever session needs you most. A session's `off`/end event removes its bucket; stale buckets from a crashed session are pruned automatically.
 
 ---
 
@@ -140,7 +152,7 @@ MoonsideBar/
 │   ├── MoonsideBarApp.swift      # Entry point
 │   ├── AppState.swift            # Observable app state
 │   ├── BluetoothManager.swift    # BLE connection + reconnect
-│   ├── StateFileMonitor.swift    # /tmp/moonside_state watcher
+│   ├── StateFileMonitor.swift    # per-agent state-file watcher (cc / ag / cx)
 │   ├── MenuBarView.swift         # Status-bar popover
 │   ├── SidePanelController.swift # Frosted-glass side panel
 │   ├── SetupWizardView.swift     # One-click agent setup
