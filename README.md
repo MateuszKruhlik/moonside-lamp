@@ -103,13 +103,15 @@ MoonsideBar watches all three files and reacts immediately, applying the highest
 
 ### Multi-session aggregation
 
-The Claude Code and Codex hooks are **per-session aware**, so concurrent sessions don't clobber each other. Each session writes its own bucket under `/tmp/moonside_<agent>.d/<session_id>`, and a shared helper (`moonside_resolve.sh`) collapses every live session into the single watched file, picking the highest-priority state:
+All three hooks (Claude Code, Codex, and Antigravity) are **per-session aware**, so concurrent sessions don't clobber each other. Each session writes its own bucket under `/tmp/moonside_<agent>.d/<session_id>`, and a shared helper (`moonside_resolve.sh`) collapses every live session into the single watched file, picking the highest-priority state:
 
 ```
 input  >  working  >  idle  >  off
 ```
 
 So a tab that finishes won't drag the lamp to idle while another tab is still working — the lamp always reflects whichever session needs you most. A session's `off`/end event removes its bucket; stale buckets from a crashed session are pruned automatically.
+
+Claude Code and Codex pass a real session id to the hook. Antigravity (Gemini) doesn't, so its hook keys the bucket on the controlling terminal (`tty`) — one per terminal tab — and falls back to a shared `default` bucket (last-wins) only when no tty is available.
 
 ---
 
