@@ -104,8 +104,8 @@ MoonsideBar watches the file and reacts immediately. Valid values are in the sta
 ## Build from Source
 
 ```bash
-git clone https://github.com/matikkutik/moonside-bar.git
-cd moonside-bar
+git clone https://github.com/MateuszKruhlik/moonside-lamp.git
+cd moonside-lamp
 
 # Requires xcodegen
 brew install xcodegen
