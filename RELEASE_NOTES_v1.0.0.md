@@ -38,7 +38,7 @@ If you prefer, you can always build from source: `brew install xcodegen && xcode
 
 ```
 shasum -a 256 MoonsideBar-v1.0.0.zip
-67b2d48bde625711c388a331ebdda0a1c8c2e55ec621fee919db768feecb2c23
+5bf3d09b7f5966e6dd25134521da6ad9ae889c9172f583db1c648d46159d738e
 ```
 
 ## Credits
