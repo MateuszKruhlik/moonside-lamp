@@ -70,9 +70,17 @@ Your Moonside lamp becomes the **out-of-screen status light** for whichever AI a
 
 ---
 
+## Install
+
+**Download:** grab `MoonsideBar-v1.0.0.zip` from [Releases](https://github.com/matikkutik/moonside-bar/releases), unzip, and move `MoonsideBar.app` to `/Applications`.
+
+> **First launch:** the app is unsigned (free, open source — no Apple Developer account), so **right-click → Open → Open** the first time. On macOS 15+ you may instead need **System Settings → Privacy & Security → "Open Anyway"**. The prebuilt binary is Apple Silicon (arm64) only — Intel users, build from source below.
+
+Prefer building yourself? See [Build from source](#build-from-source).
+
 ## Quick Start
 
-1. Build and launch MoonsideBar (see [Build from source](#build-from-source))
+1. Launch MoonsideBar
 2. Allow Bluetooth when macOS asks — the app finds your lamp automatically
 3. Pick your agent card → click **Setup**
 
@@ -159,7 +167,6 @@ MoonsideBar/
 │   ├── SidePanelController.swift # Frosted-glass side panel
 │   ├── SetupWizardView.swift     # One-click agent setup
 │   └── HowItWorksView.swift
-├── icons/                        # App icons
 ├── project.yml                   # xcodegen spec
 └── MoonsideBar.xcodeproj         # Generated
 ```
