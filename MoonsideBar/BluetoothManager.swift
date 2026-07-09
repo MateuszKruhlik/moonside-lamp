@@ -23,6 +23,9 @@ final class BluetoothManager: NSObject, CBCentralManagerDelegate, CBPeripheralDe
     private let maxRetries = 10
     private var retryTimer: Timer?
     private var scanTimeoutTimer: Timer?
+    private var connectTimeoutTimer: Timer?
+    private var uuidConnectAttempts = 0
+    private let maxUUIDConnectAttempts = 3
     private var commandQueue: [String] = []
 
     // MARK: - Init
@@ -38,8 +41,10 @@ final class BluetoothManager: NSObject, CBCentralManagerDelegate, CBPeripheralDe
     func send(_ command: String) {
         guard let peripheral, let rx = rxCharacteristic,
               peripheral.state == .connected else {
-            // Queue command for when we reconnect
+            // Queue command for when we reconnect. Compact right away so the
+            // queue stays bounded while offline (last command per type wins).
             commandQueue.append(command)
+            compactQueue()
             return
         }
         guard let data = command.data(using: .utf8) else { return }
@@ -53,13 +58,32 @@ final class BluetoothManager: NSObject, CBCentralManagerDelegate, CBPeripheralDe
 
         // 1. Try saved UUID (instant reconnect, no scan needed)
         let savedUUID = Defaults[.deviceUUID]
-        if let uuid = UUID(uuidString: savedUUID), !savedUUID.isEmpty {
+        if let uuid = UUID(uuidString: savedUUID), !savedUUID.isEmpty,
+           uuidConnectAttempts < maxUUIDConnectAttempts {
             let known = centralManager.retrievePeripherals(withIdentifiers: [uuid])
             if let p = known.first {
+                uuidConnectAttempts += 1
                 peripheral = p
                 p.delegate = self
                 centralManager.connect(p)
                 onConnectionStatusChanged?(.connecting)
+                // CoreBluetooth connect() never times out on its own, so a stale
+                // saved UUID would be a dead end — guard the attempt and fall back
+                // to a normal scan if it doesn't connect in time.
+                connectTimeoutTimer?.invalidate()
+                connectTimeoutTimer = Timer.scheduledTimer(withTimeInterval: 10, repeats: false) { [weak self] _ in
+                    guard let self, self.peripheral?.state != .connected else { return }
+                    if let p = self.peripheral {
+                        self.centralManager.cancelPeripheralConnection(p)
+                    }
+                    self.peripheral = nil
+                    if self.uuidConnectAttempts >= self.maxUUIDConnectAttempts {
+                        // The saved UUID looks stale — forget it. A successful
+                        // connect via scan re-saves the fresh one.
+                        Defaults[.deviceUUID] = ""
+                    }
+                    self.startScan()
+                }
                 return
             }
         }
@@ -75,7 +99,13 @@ final class BluetoothManager: NSObject, CBCentralManagerDelegate, CBPeripheralDe
             return
         }
 
-        // 3. Scan without service filter — Moonside doesn't advertise NUS UUID
+        // 3. Scan
+        startScan()
+    }
+
+    /// Scan without service filter — Moonside doesn't advertise NUS UUID.
+    private func startScan() {
+        guard centralManager.state == .poweredOn else { return }
         centralManager.scanForPeripherals(withServices: nil, options: [
             CBCentralManagerScanOptionAllowDuplicatesKey: false
         ])
@@ -94,6 +124,8 @@ final class BluetoothManager: NSObject, CBCentralManagerDelegate, CBPeripheralDe
     func disconnect() {
         retryTimer?.invalidate()
         retryTimer = nil
+        connectTimeoutTimer?.invalidate()
+        connectTimeoutTimer = nil
         if let p = peripheral {
             centralManager.cancelPeripheralConnection(p)
         }
@@ -103,7 +135,10 @@ final class BluetoothManager: NSObject, CBCentralManagerDelegate, CBPeripheralDe
     func manualReconnect() {
         retryTimer?.invalidate()
         retryTimer = nil
+        connectTimeoutTimer?.invalidate()
+        connectTimeoutTimer = nil
         retryCount = 0
+        uuidConnectAttempts = 0
         if let p = peripheral {
             centralManager.cancelPeripheralConnection(p)
         }
@@ -132,6 +167,7 @@ final class BluetoothManager: NSObject, CBCentralManagerDelegate, CBPeripheralDe
             guard let self else { return }
             if self.peripheral?.state != .connected {
                 self.retryCount = 0
+                self.uuidConnectAttempts = 0
                 self.connect()
             }
         }
@@ -153,16 +189,43 @@ final class BluetoothManager: NSObject, CBCentralManagerDelegate, CBPeripheralDe
 
     // MARK: - Flush queued commands
 
+    /// Collapses the offline queue to the last command per type. Lamp state is
+    /// idempotent — only the final power/brightness/color/theme matters — so
+    /// there is no point replaying the whole offline history after reconnect.
+    private func compactQueue() {
+        guard commandQueue.count > 1 else { return }
+        var lastIndexByType: [String: Int] = [:]
+        for (index, command) in commandQueue.enumerated() {
+            lastIndexByType[Self.commandType(command)] = index
+        }
+        commandQueue = lastIndexByType.values.sorted().map { commandQueue[$0] }
+    }
+
+    private static func commandType(_ command: String) -> String {
+        if command.hasPrefix("BRIGH") { return "brightness" }
+        if command.hasPrefix("COLOR") { return "color" }
+        if command.hasPrefix("THEME") { return "theme" }
+        if command == BLECommand.ledOn || command == BLECommand.ledOff { return "power" }
+        return command
+    }
+
     private func flushQueue() {
-        guard let peripheral, let rx = rxCharacteristic,
+        guard let peripheral, rxCharacteristic != nil,
               peripheral.state == .connected else { return }
+        compactQueue()
         let queued = commandQueue
         commandQueue.removeAll()
-        for command in queued {
-            guard let data = command.data(using: .utf8) else { continue }
-            let writeType: CBCharacteristicWriteType = rx.properties.contains(.writeWithoutResponse)
-                ? .withoutResponse : .withResponse
-            peripheral.writeValue(data, for: rx, type: writeType)
+        for (index, command) in queued.enumerated() {
+            // Stagger the replayed writes slightly so the burst doesn't overrun
+            // the lamp's BLE buffer (writes are mostly write-without-response).
+            DispatchQueue.main.asyncAfter(deadline: .now() + Double(index) * 0.06) { [weak self] in
+                guard let self, let peripheral = self.peripheral, let rx = self.rxCharacteristic,
+                      peripheral.state == .connected,
+                      let data = command.data(using: .utf8) else { return }
+                let writeType: CBCharacteristicWriteType = rx.properties.contains(.writeWithoutResponse)
+                    ? .withoutResponse : .withResponse
+                peripheral.writeValue(data, for: rx, type: writeType)
+            }
         }
     }
 
@@ -199,12 +262,17 @@ final class BluetoothManager: NSObject, CBCentralManagerDelegate, CBPeripheralDe
 
     func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
         retryCount = 0
+        uuidConnectAttempts = 0
         retryTimer?.invalidate()
         retryTimer = nil
+        connectTimeoutTimer?.invalidate()
+        connectTimeoutTimer = nil
         peripheral.discoverServices([Self.nusServiceUUID])
     }
 
     func centralManager(_ central: CBCentralManager, didFailToConnect peripheral: CBPeripheral, error: Error?) {
+        connectTimeoutTimer?.invalidate()
+        connectTimeoutTimer = nil
         onConnectionStatusChanged?(.disconnected)
         scheduleRetry()
     }
@@ -215,6 +283,9 @@ final class BluetoothManager: NSObject, CBCentralManagerDelegate, CBPeripheralDe
         error: Error?
     ) {
         rxCharacteristic = nil
+        // Drop stale offline history immediately — keep only the newest command
+        // per type so a long offline stretch can't build up an unbounded replay.
+        compactQueue()
         onConnectionStatusChanged?(.disconnected)
         // Auto-reconnect on unexpected disconnect
         if error != nil {
