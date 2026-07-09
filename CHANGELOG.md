@@ -23,5 +23,18 @@ First public release.
 ### Fixed
 - Bluetooth entitlement (`com.apple.security.device.bluetooth`) embedded in the hardened-runtime Release build, so the standalone app can use CoreBluetooth outside Xcode
 - Codex legend swatch color in the How It Works window (green → purple)
+- **Setup wizard no longer overwrites existing Claude Code hooks** — moonside entries are merged per event into `~/.claude/settings.json` (appended to each event's array, duplicates skipped) instead of replacing the whole `hooks` key
+- **Reconnect via saved device UUID can no longer dead-end** — the connect attempt gets a 10 s timeout with fallback to a normal scan, and a saved UUID that fails 3 times in a row is forgotten (re-saved on the next successful connect)
+- **Sleep prevention watchdog** — if an agent crashes without its Stop/SessionEnd hook firing, the idle-sleep assertion is now released once no working agent's state file has changed for 30 minutes (checked every 60 s), so the Mac can sleep again
+- **Offline command queue is bounded** — while disconnected only the last command per type (power/brightness/color/theme) is kept, and the replay after reconnect is staggered instead of bursting the lamp's BLE buffer
+- **State-file monitor survives failed re-watch** — if re-opening a state file after delete/rename fails, the file is recreated and the watch retried instead of silently dying
+- App icon: 256@2x and 512@2x slots contained 360×360 images; regenerated at proper 512/1024 px
+
+### Known Issues
+- **Offline replay is compacted, not eliminated** — after a reconnect the app still replays the last queued command per type, so the lamp may briefly re-apply a state from before the disconnect
+- **Codex "Stop" maps to the input (attention) state** — Codex exposes no reliable "waiting for input" event, so a finished Codex turn shows the purple attention glow rather than idle; a genuinely idle Codex session can look like it needs you
+- **Codex `config.toml` check can false-positive** — the wizard only checks that the file mentions `codex_hooks` and `true` somewhere, so e.g. a commented-out line can make the step pass without hooks actually enabled
+- **No uninstaller** — the wizard has no uninstall path; to remove the integration, delete the moonside entries from `~/.claude/settings.json`, `~/.codex/hooks.json`, the moonside section from `~/.gemini/GEMINI.md`, and the `~/.claude/moonside_hooks/` directory
+- **Sleep watchdog trade-off** — a single tool call running longer than 30 minutes without any hook activity stops holding the sleep assertion, so the Mac may sleep mid-task in that (rare) case
 
 [1.0.0]: https://github.com/matikkutik/moonside-bar/releases/tag/v1.0.0
