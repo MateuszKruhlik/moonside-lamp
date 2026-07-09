@@ -280,7 +280,9 @@ struct SetupWizardView: View {
            text.contains("moonside") {
             updateStep(2, status: .passed)
         } else {
-            // Merge hooks into settings.json
+            // Merge hooks into settings.json — append per event, never replace the
+            // user's existing hooks (replacing the whole "hooks" key would silently
+            // wipe any hooks the user already configured).
             do {
                 var settings: [String: Any] = [:]
                 if let data = fm.contents(atPath: settingsPath),
@@ -289,7 +291,25 @@ struct SetupWizardView: View {
                 }
                 let hooksData = Self.settingsHooksJSON.data(using: .utf8)!
                 let hooksObj = try JSONSerialization.jsonObject(with: hooksData) as! [String: Any]
-                settings["hooks"] = hooksObj["hooks"]
+                let moonsideHooks = hooksObj["hooks"] as! [String: Any]
+
+                var existingHooks = settings["hooks"] as? [String: Any] ?? [:]
+                for (event, value) in moonsideHooks {
+                    let moonsideEntries = value as? [Any] ?? []
+                    if var eventEntries = existingHooks[event] as? [Any] {
+                        // Append only entries not already present (canonical-JSON compare).
+                        let present = Set(eventEntries.compactMap { Self.canonicalJSON($0) })
+                        for entry in moonsideEntries {
+                            if let key = Self.canonicalJSON(entry), present.contains(key) { continue }
+                            eventEntries.append(entry)
+                        }
+                        existingHooks[event] = eventEntries
+                    } else {
+                        existingHooks[event] = moonsideEntries
+                    }
+                }
+                settings["hooks"] = existingHooks
+
                 let output = try JSONSerialization.data(withJSONObject: settings, options: [.prettyPrinted, .sortedKeys])
                 try output.write(to: URL(fileURLWithPath: settingsPath))
                 updateStep(2, status: .installed, detail: "Hooks merged into settings.json")
@@ -516,6 +536,16 @@ struct SetupWizardView: View {
     }
 
     // MARK: - Helpers
+
+    /// Canonical JSON string of a hook entry, used for duplicate detection when
+    /// merging moonside entries into an existing hooks array.
+    private static func canonicalJSON(_ object: Any) -> String? {
+        guard JSONSerialization.isValidJSONObject([object]),
+              let data = try? JSONSerialization.data(withJSONObject: [object], options: [.sortedKeys]) else {
+            return nil
+        }
+        return String(data: data, encoding: .utf8)
+    }
 
     private func updateStep(_ index: Int, status: SetupStep.StepStatus, detail: String? = nil) {
         guard index < steps.count else { return }
