@@ -187,4 +187,4 @@ Also:
 
 MIT. See [LICENSE](LICENSE).
 
-Built by [Mateusz Kruhlik](https://rabituza.studio) · Rabituza Studio
+Built by [Mateusz Kruhlik](https://github.com/matikkutik) · Rabituza Studio
