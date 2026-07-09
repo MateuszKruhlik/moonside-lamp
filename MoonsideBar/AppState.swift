@@ -245,6 +245,7 @@ final class AppState {
     var isConnected: Bool { connectionStatus == .connected }
     private var isManuallyOff: Bool = false
     private var sleepPreventionActivity: NSObjectProtocol?
+    private var sleepWatchdogTimer: Timer?
 
     // Managers
     var bluetoothManager: BluetoothManager?
@@ -277,7 +278,12 @@ final class AppState {
                 guard !self.isManuallyOff else { return }
                 self.agentStates[agent] = state
                 let resolved = self.resolveAgentPriority()
-                guard resolved != self.currentState else { return }
+                guard resolved != self.currentState else {
+                    // Same lamp state, but a fresh hook event may need to re-arm
+                    // the sleep assertion the watchdog released as stale.
+                    self.updateSleepPrevention(for: resolved)
+                    return
+                }
                 self.applyState(resolved)
             }
             monitor.start()
@@ -563,9 +569,57 @@ final class AppState {
                 options: .idleSystemSleepDisabled,
                 reason: "MoonsideBar: AI agent is actively processing"
             )
+            startSleepWatchdog()
         } else if !isWorking, let activity = sleepPreventionActivity {
             ProcessInfo.processInfo.endActivity(activity)
             sleepPreventionActivity = nil
+            stopSleepWatchdog()
+        }
+    }
+
+    // MARK: - Sleep-assertion watchdog
+
+    /// Failsafe for the event-driven release above: if an agent process dies
+    /// without its Stop/SessionEnd hook firing, no file event ever ends the
+    /// assertion and the Mac would never sleep again. While the assertion is
+    /// held we re-check every 60 s; a "working" agent whose state file hasn't
+    /// changed in over 30 min stops counting, and once no fresh working agent
+    /// remains the assertion is released.
+    private static let sleepWatchdogInterval: TimeInterval = 60
+    private static let staleWorkingThreshold: TimeInterval = 30 * 60
+
+    private func startSleepWatchdog() {
+        sleepWatchdogTimer?.invalidate()
+        sleepWatchdogTimer = Timer.scheduledTimer(
+            withTimeInterval: Self.sleepWatchdogInterval,
+            repeats: true
+        ) { [weak self] _ in
+            self?.sleepWatchdogTick()
+        }
+    }
+
+    private func stopSleepWatchdog() {
+        sleepWatchdogTimer?.invalidate()
+        sleepWatchdogTimer = nil
+    }
+
+    private func sleepWatchdogTick() {
+        guard sleepPreventionActivity != nil else {
+            stopSleepWatchdog()
+            return
+        }
+        let workingStates: Set<LampState> = [.working, .workingAG, .workingCX]
+        let fm = FileManager.default
+        let hasFreshWorkingAgent = agentStates.contains { agent, state in
+            guard workingStates.contains(state) else { return false }
+            guard let attrs = try? fm.attributesOfItem(atPath: "/tmp/moonside_\(agent)"),
+                  let mtime = attrs[.modificationDate] as? Date else { return false }
+            return Date().timeIntervalSince(mtime) < Self.staleWorkingThreshold
+        }
+        if !hasFreshWorkingAgent, let activity = sleepPreventionActivity {
+            ProcessInfo.processInfo.endActivity(activity)
+            sleepPreventionActivity = nil
+            stopSleepWatchdog()
         }
     }
 }
