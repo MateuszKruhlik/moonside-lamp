@@ -37,4 +37,4 @@ First public release.
 - **No uninstaller** — the wizard has no uninstall path; to remove the integration, delete the moonside entries from `~/.claude/settings.json`, `~/.codex/hooks.json`, the moonside section from `~/.gemini/GEMINI.md`, and the `~/.claude/moonside_hooks/` directory
 - **Sleep watchdog trade-off** — a single tool call running longer than 30 minutes without any hook activity stops holding the sleep assertion, so the Mac may sleep mid-task in that (rare) case
 
-[1.0.0]: https://github.com/matikkutik/moonside-bar/releases/tag/v1.0.0
+[1.0.0]: https://github.com/MateuszKruhlik/moonside-lamp/releases/tag/v1.0.0

@@ -104,7 +104,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func openWebsite() {
-        if let url = URL(string: "https://github.com/matikkutik/moonside-bar") {
+        if let url = URL(string: "https://github.com/MateuszKruhlik/moonside-lamp") {
             NSWorkspace.shared.open(url)
         }
     }

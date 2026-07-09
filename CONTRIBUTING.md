@@ -5,7 +5,7 @@ Thanks for your interest! MoonsideBar is a small, focused app — contributions 
 ## Getting started
 
 ```bash
-git clone https://github.com/matikkutik/moonside-bar.git
+git clone https://github.com/MateuszKruhlik/moonside-lamp.git
 cd moonside-bar
 brew install xcodegen
 xcodegen generate

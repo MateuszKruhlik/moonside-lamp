@@ -72,7 +72,7 @@ Your Moonside lamp becomes the **out-of-screen status light** for whichever AI a
 
 ## Install
 
-**Download:** grab `MoonsideBar-v1.0.0.zip` from [Releases](https://github.com/matikkutik/moonside-bar/releases), unzip, and move `MoonsideBar.app` to `/Applications`.
+**Download:** grab `MoonsideBar-v1.0.0.zip` from [Releases](https://github.com/MateuszKruhlik/moonside-lamp/releases), unzip, and move `MoonsideBar.app` to `/Applications`.
 
 > **First launch:** the app is unsigned (free, open source — no Apple Developer account), so **right-click → Open → Open** the first time. On macOS 15+ you may instead need **System Settings → Privacy & Security → "Open Anyway"**. The prebuilt binary is Apple Silicon (arm64) only — Intel users, build from source below.
 
@@ -126,7 +126,7 @@ Claude Code and Codex pass a real session id to the hook. Antigravity (Gemini) d
 ## Build from Source
 
 ```bash
-git clone https://github.com/matikkutik/moonside-bar.git
+git clone https://github.com/MateuszKruhlik/moonside-lamp.git
 cd moonside-bar
 
 # Requires xcodegen
