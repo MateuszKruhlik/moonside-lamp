@@ -28,7 +28,7 @@ final class StateFileMonitor {
 
     // MARK: - Private
 
-    private func watchFile() {
+    private func watchFile(retryOnFailure: Bool = true) {
         // Clean up previous source if any
         source?.cancel()
         if fileDescriptor >= 0 {
@@ -36,7 +36,19 @@ final class StateFileMonitor {
         }
 
         fileDescriptor = open(path, O_EVTONLY)
-        guard fileDescriptor >= 0 else { return }
+        guard fileDescriptor >= 0 else {
+            // The file can be briefly gone after a delete/rename event — losing
+            // the watch here would silently kill the monitor for good. Recreate
+            // the file (like start() does) and retry once after a short delay.
+            guard retryOnFailure else { return }
+            if !FileManager.default.fileExists(atPath: path) {
+                FileManager.default.createFile(atPath: path, contents: "idle".data(using: .utf8))
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in
+                self?.watchFile(retryOnFailure: false)
+            }
+            return
+        }
 
         source = DispatchSource.makeFileSystemObjectSource(
             fileDescriptor: fileDescriptor,
