@@ -15,6 +15,8 @@
 
 Your Moonside lamp becomes the **out-of-screen status light** for whichever AI agent you're using. Orange pulse while Claude is working, purple while Codex is working, blue while Gemini is working, warm glow when anyone needs your input, solid white when idle. Works with three agents out of the box; extensible to anything that can write a file.
 
+![How the lamp works](assets/Sample.png)
+
 ---
 
 ## Features
