@@ -13,7 +13,7 @@
 
 ## The Idea
 
-Your Moonside lamp becomes the **out-of-screen status light** for whichever AI agent you're using. Orange pulse while Claude is working, purple while Codex is working, blue while Gemini is working, warm glow when anyone needs your input, solid white when idle. Works with three agents out of the box; extensible to anything that can write a file.
+Your Moonside lamp becomes the **out-of-screen status light** for whichever AI agent you're using. Orange pulse while Claude is working, purple while Codex is working, blue while Gemini is working, warm glow when anyone needs your input, your selected solid color when idle. Works with three agents out of the box; extensible to anything that can write a file.
 
 ![How the lamp works](assets/Sample.png)
 
@@ -49,7 +49,7 @@ Your Moonside lamp becomes the **out-of-screen status light** for whichever AI a
 
 | State | File content | Effect | When |
 |:------|:-------------|:-------|:-----|
-| Idle | `idle` | Warm white solid | Agent ready |
+| Idle | `idle` | Selected solid color | No active task |
 | Working (Claude) | `working` | Orange BEAT2 pulse | Claude processing |
 | Working (Codex) | `working_cx` | Purple BEAT2 pulse | Codex processing |
 | Working (Gemini) | `working_ag` | Blue BEAT2 pulse | Antigravity processing |
@@ -119,7 +119,7 @@ All three hooks (Claude Code, Codex, and Antigravity) are **per-session aware**,
 input  >  working  >  idle  >  off
 ```
 
-So a tab that finishes won't drag the lamp to idle while another tab is still working — the lamp always reflects whichever session needs you most. A session's `off`/end event removes its bucket; stale buckets from a crashed session are pruned automatically.
+A tab that finishes won't drag the lamp to idle while another tab is still working. The lamp reflects whichever session needs you most. A session's `off`/end event removes its bucket; buckets older than 24 hours are pruned on the next idle/end event. Abrupt interruption can leave a working bucket until cleanup.
 
 Claude Code and Codex pass a real session id to the hook. Antigravity (Gemini) doesn't, so its hook keys the bucket on the controlling terminal (`tty`) — one per terminal tab — and falls back to a shared `default` bucket (last-wins) only when no tty is available.
 
@@ -190,3 +190,9 @@ Also:
 MIT. See [LICENSE](LICENSE).
 
 Built by [Mateusz Kruhlik](https://github.com/matikkutik) · Rabituza Studio
+
+### Codex completion hooks
+
+`Stop` and `agent-turn-complete` return the completed session to `idle`. The lamp returns to the selected resting color once no other session needs attention or is working. A completed answer does not set `input_cx`.
+
+The notification handler accepts Codex's `thread-id` as well as legacy session identifiers. Unknown events and notifications without an identifier are ignored, preserving other sessions. The source scripts are in `scripts/`; regression tests run with `python3 -m unittest discover -s tests -v` and use isolated state files, without controlling the real lamp.
