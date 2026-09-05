@@ -100,6 +100,24 @@ class CodexHookBehaviorTests(unittest.TestCase):
         self.assertEqual(self.state(), "idle")
         self.assertEqual(self.bucket("alpha"), "idle")
 
+    def test_tool_events_do_not_reanimate_completed_session(self):
+        self.run_hook({"hook_event_name": "UserPromptSubmit", "session_id": "alpha"})
+        self.run_hook({"hook_event_name": "Stop", "session_id": "alpha"})
+
+        for event in ("PreToolUse", "PostToolUse"):
+            with self.subTest(event=event):
+                self.run_hook({"hook_event_name": event, "session_id": "alpha"})
+                self.assertEqual(self.state(), "idle")
+                self.assertEqual(self.bucket("alpha"), "idle")
+
+    def test_tool_event_does_not_interrupt_active_session(self):
+        self.run_hook({"hook_event_name": "UserPromptSubmit", "session_id": "alpha"})
+
+        self.run_hook({"hook_event_name": "PreToolUse", "session_id": "alpha"})
+
+        self.assertEqual(self.state(), "working_cx")
+        self.assertEqual(self.bucket("alpha"), "working")
+
     def test_notify_agent_turn_complete_uses_thread_dash_id(self):
         self.run_hook({"hook_event_name": "UserPromptSubmit", "thread_id": "thread-42"})
 
@@ -116,6 +134,17 @@ class CodexHookBehaviorTests(unittest.TestCase):
 
         self.assertEqual(self.bucket("alpha"), "idle")
         self.assertEqual(self.bucket("beta"), "working")
+        self.assertEqual(self.state(), "working_cx")
+
+    def test_late_tool_event_does_not_change_completed_parent_bucket(self):
+        self.run_hook({"hook_event_name": "UserPromptSubmit", "session_id": "parent"})
+        self.run_hook({"hook_event_name": "Stop", "session_id": "parent"})
+        self.run_hook({"hook_event_name": "UserPromptSubmit", "session_id": "worker"})
+
+        self.run_hook({"hook_event_name": "PreToolUse", "session_id": "parent"})
+
+        self.assertEqual(self.bucket("parent"), "idle")
+        self.assertEqual(self.bucket("worker"), "working")
         self.assertEqual(self.state(), "working_cx")
 
     def test_notify_completion_does_not_override_another_working_session(self):
@@ -182,14 +211,14 @@ class CodexHookSourceTests(unittest.TestCase):
             HOOK.read_text(),
         )
 
-    def test_wizard_uses_unambiguous_v2_install_marker(self):
+    def test_wizard_uses_unambiguous_v3_install_marker(self):
         wizard = WIZARD.read_text()
         codex_setup = wizard.split("private func runCodexSetup()", 1)[1].split(
             "// MARK: - Helpers", 1
         )[0]
-        self.assertIn('content.contains("MOONSIDE_CODEX_HOOK_VERSION=2")', codex_setup)
-        self.assertEqual(wizard.count('content.contains("MOONSIDE_CODEX_HOOK_VERSION=2")'), 1)
-        self.assertIn("MOONSIDE_CODEX_HOOK_VERSION=2", HOOK.read_text())
+        self.assertIn('content.contains("MOONSIDE_CODEX_HOOK_VERSION=3")', codex_setup)
+        self.assertEqual(wizard.count('content.contains("MOONSIDE_CODEX_HOOK_VERSION=3")'), 1)
+        self.assertIn("MOONSIDE_CODEX_HOOK_VERSION=3", HOOK.read_text())
 
 
 if __name__ == "__main__":

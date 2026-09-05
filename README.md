@@ -196,3 +196,5 @@ Built by [Mateusz Kruhlik](https://github.com/matikkutik) · Rabituza Studio
 `Stop` and `agent-turn-complete` return the completed session to `idle`. The lamp returns to the selected resting color once no other session needs attention or is working. A completed answer does not set `input_cx`.
 
 The notification handler accepts Codex's `thread-id` as well as legacy session identifiers. Unknown events and notifications without an identifier are ignored, preserving other sessions. The source scripts are in `scripts/`; regression tests run with `python3 -m unittest discover -s tests -v` and use isolated state files, without controlling the real lamp.
+
+Codex starts the working state on `UserPromptSubmit`. Tool events do not change it: late `PreToolUse` or `PostToolUse` events must not reactivate a task after its response has completed.

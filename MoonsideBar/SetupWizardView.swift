@@ -431,7 +431,7 @@ struct SetupWizardView: View {
 
         if fm.fileExists(atPath: hookPath),
            let content = try? String(contentsOfFile: hookPath, encoding: .utf8),
-           content.contains("MOONSIDE_CODEX_HOOK_VERSION=2") {
+           content.contains("MOONSIDE_CODEX_HOOK_VERSION=3") {
             updateStep(1, status: .passed)
         } else {
             do {
@@ -739,7 +739,7 @@ struct SetupWizardView: View {
     # Codex hooks receive JSON on stdin and return JSON on stdout.
     # Always exits 0 so it can never block Codex.
 
-    MOONSIDE_CODEX_HOOK_VERSION=2
+    MOONSIDE_CODEX_HOOK_VERSION=3
 
     IFS= read -r -d '' INPUT 2>/dev/null || true
 
@@ -762,10 +762,10 @@ struct SetupWizardView: View {
     fi
 
     case "$EVENT" in
-      SessionStart)                          CAT=idle ;;
-      UserPromptSubmit|PreToolUse|PostToolUse) CAT=working ;;
-      Stop)                                  CAT=idle ;;
-      *)                                     exit 0 ;;
+      SessionStart|Stop) CAT=idle ;;
+      UserPromptSubmit)  CAT=working ;;
+      PreToolUse|PostToolUse) exit 0 ;;
+      *) exit 0 ;;
     esac
 
     # Without an identifier there is no safe per-session bucket to update.
