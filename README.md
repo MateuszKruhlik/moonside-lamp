@@ -185,16 +185,20 @@ Also:
 
 ---
 
+## Codex task state
+
+Each persisted user task has its own lamp state. A new prompt starts `working`; the matching response completion or interruption returns that task to `idle`. Closing a session removes its state. Another active user task keeps the working animation running. Late tool calls, old-turn completions and duplicate notifications do not restart or prematurely finish a newer turn.
+
+Codex also runs internal memory and review agents. To prevent those invisible tasks from leaving the lamp stuck, the integration admits only IDs recorded as user tasks in the local Codex state index. Spawned subagents and ephemeral runs such as `codex exec --ephemeral` do not independently control the lamp. This admission check includes the older desktop-root representation and currently targets the `state_5.sqlite` schema used by Codex 0.153.4; if the index is missing or incompatible, new starts are ignored. Existing accepted sessions can still finish.
+
+Hooks read top-level `session_id` and `turn_id`; notifications read `thread-id` and `turn-id`. A per-agent process lock serializes updates, and accepted boundaries remove unknown session buckets. This does not guarantee recovery after every abrupt process crash with no terminal event.
+
+After installing or upgrading, use `/hooks` in the Codex CLI to review the Moonside hooks. `Interrupt` and `SessionEnd` are new registrations and need their own approval; the existing start and completion approvals do not cover them. Untrusted hooks are skipped.
+
+The source integration scripts are in `scripts/`. Regression tests run with `python3 -B -m unittest discover -s tests -v`; they use temporary files and a temporary Codex state index. The file-monitor tests compile the real Swift monitor and exercise macOS DispatchSource events. Reconnect tests exercise delayed Bluetooth command replay and its cancellation when a newer lamp state arrives.
+
 ## License
 
 MIT. See [LICENSE](LICENSE).
 
 Built by [Mateusz Kruhlik](https://github.com/matikkutik) · Rabituza Studio
-
-### Codex completion hooks
-
-`Stop` and `agent-turn-complete` return the completed session to `idle`. The lamp returns to the selected resting color once no other session needs attention or is working. A completed answer does not set `input_cx`.
-
-The notification handler accepts Codex's `thread-id` as well as legacy session identifiers. Unknown events and notifications without an identifier are ignored, preserving other sessions. The source scripts are in `scripts/`; regression tests run with `python3 -m unittest discover -s tests -v` and use isolated state files, without controlling the real lamp.
-
-Codex starts the working state on `UserPromptSubmit`. Tool events do not change it: late `PreToolUse` or `PostToolUse` events must not reactivate a task after its response has completed.

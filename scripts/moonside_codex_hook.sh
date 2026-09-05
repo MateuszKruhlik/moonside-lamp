@@ -1,42 +1,13 @@
 #!/usr/bin/env bash
-# Moonside LED hook for OpenAI Codex (per-session aware).
-# Codex hooks receive JSON on stdin and return JSON on stdout.
-# Always exits 0 so it can never block Codex.
+# Moonside hook entry point for persisted, user-facing Codex sessions.
+# Always exits 0 so a lamp integration can never block Codex.
 
-MOONSIDE_CODEX_HOOK_VERSION=3
+MOONSIDE_CODEX_HOOK_VERSION=5
 
-IFS= read -r -d '' INPUT 2>/dev/null || true
+IFS= read -r -d '' PAYLOAD 2>/dev/null || true
+printf '%s' "$PAYLOAD" \
+  | /bin/bash "$HOME/.claude/moonside_hooks/moonside_codex_state.sh" hook \
+      >/dev/null 2>&1 \
+  || true
 
-EVENT=""
-if [[ "$INPUT" =~ \"hook_event_name\"[[:space:]]*:[[:space:]]*\"([^\"]+)\" ]]; then
-  EVENT="${BASH_REMATCH[1]}"
-fi
-
-# Prefer the current thread identifier so the hook and Codex notify command
-# update the same per-session bucket. Keep legacy identifiers for older payloads.
-SID=""
-if [[ "$INPUT" =~ \"thread_id\"[[:space:]]*:[[:space:]]*\"([^\"]+)\" ]]; then
-  SID="${BASH_REMATCH[1]}"
-elif [[ "$INPUT" =~ \"thread-id\"[[:space:]]*:[[:space:]]*\"([^\"]+)\" ]]; then
-  SID="${BASH_REMATCH[1]}"
-elif [[ "$INPUT" =~ \"session_id\"[[:space:]]*:[[:space:]]*\"([^\"]+)\" ]]; then
-  SID="${BASH_REMATCH[1]}"
-elif [[ "$INPUT" =~ \"conversation_id\"[[:space:]]*:[[:space:]]*\"([^\"]+)\" ]]; then
-  SID="${BASH_REMATCH[1]}"
-fi
-
-case "$EVENT" in
-  SessionStart|Stop) CAT=idle ;;
-  UserPromptSubmit)  CAT=working ;;
-  PreToolUse|PostToolUse) exit 0 ;;
-  *) exit 0 ;;
-esac
-
-# Without an identifier there is no safe per-session bucket to update.
-[ -n "$SID" ] || exit 0
-
-source "$HOME/.claude/moonside_hooks/moonside_resolve.sh"
-MS_SID="$SID" MS_CAT="$CAT" moonside_resolve cx
-
-echo ""
 exit 0

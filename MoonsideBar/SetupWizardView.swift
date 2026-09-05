@@ -428,21 +428,33 @@ struct SetupWizardView: View {
         updateStep(1, status: .checking)
         let hooksDir = home + "/.claude/moonside_hooks"
         let hookPath = hooksDir + "/moonside_codex_hook.sh"
+        let notifyPath = hooksDir + "/moonside_codex_notify.sh"
+        let stateHelperPath = hooksDir + "/moonside_codex_state.sh"
 
         if fm.fileExists(atPath: hookPath),
            let content = try? String(contentsOfFile: hookPath, encoding: .utf8),
-           content.contains("MOONSIDE_CODEX_HOOK_VERSION=3") {
+           content.contains("MOONSIDE_CODEX_HOOK_VERSION=5"),
+           let notifyContent = try? String(contentsOfFile: notifyPath, encoding: .utf8),
+           notifyContent.contains("MOONSIDE_CODEX_NOTIFY_VERSION=5"),
+           let stateContent = try? String(contentsOfFile: stateHelperPath, encoding: .utf8),
+           stateContent.contains("MOONSIDE_CODEX_STATE_VERSION=5") {
             updateStep(1, status: .passed)
         } else {
             do {
                 try fm.createDirectory(atPath: hooksDir, withIntermediateDirectories: true)
+                // Install the coordinator first so upgraded entry points never
+                // observe a partially installed bundle.
+                try Self.codexStateScriptContent.write(toFile: stateHelperPath, atomically: true, encoding: .utf8)
+                try fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: stateHelperPath)
                 try Self.codexHookScriptContent.write(toFile: hookPath, atomically: true, encoding: .utf8)
                 try fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: hookPath)
-                // Shared per-session aggregator (sourced by the hook)
+                try Self.codexNotifyScriptContent.write(toFile: notifyPath, atomically: true, encoding: .utf8)
+                try fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: notifyPath)
+                // Keep the shared resolver available for the other agent hooks.
                 let resolvePath = hooksDir + "/moonside_resolve.sh"
                 try Self.resolveScriptContent.write(toFile: resolvePath, atomically: true, encoding: .utf8)
                 try fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: resolvePath)
-                updateStep(1, status: .installed, detail: "Hook script installed")
+                updateStep(1, status: .installed, detail: "Codex scripts installed")
             } catch {
                 updateStep(1, status: .failed, detail: "Failed: \(error.localizedDescription)")
                 finishSetup()
@@ -484,40 +496,26 @@ struct SetupWizardView: View {
         updateStep(3, status: .checking)
         let hooksJsonPath = codexDir + "/hooks.json"
 
-        if let data = fm.contents(atPath: hooksJsonPath),
-           let text = String(data: data, encoding: .utf8),
-           text.contains("moonside") {
-            updateStep(3, status: .passed)
-        } else {
-            do {
-                if let existingData = fm.contents(atPath: hooksJsonPath),
-                   var existingJson = try JSONSerialization.jsonObject(with: existingData) as? [String: Any] {
-                    // Merge moonside hooks into existing hooks.json
-                    let moonsideData = Self.codexHooksJSON.data(using: .utf8)!
-                    let moonsideJson = try JSONSerialization.jsonObject(with: moonsideData) as! [String: Any]
-                    let moonsideHooks = moonsideJson["hooks"] as! [String: Any]
-
-                    var existingHooks = existingJson["hooks"] as? [String: Any] ?? [:]
-                    for (key, value) in moonsideHooks {
-                        if var existingArray = existingHooks[key] as? [Any] {
-                            existingArray.append(contentsOf: value as! [Any])
-                            existingHooks[key] = existingArray
-                        } else {
-                            existingHooks[key] = value
-                        }
-                    }
-                    existingJson["hooks"] = existingHooks
-
-                    let output = try JSONSerialization.data(withJSONObject: existingJson, options: [.prettyPrinted, .sortedKeys])
-                    try output.write(to: URL(fileURLWithPath: hooksJsonPath))
-                } else {
-                    // Create new hooks.json
-                    try Self.codexHooksJSON.write(toFile: hooksJsonPath, atomically: true, encoding: .utf8)
-                }
-                updateStep(3, status: .installed, detail: "Hooks written to hooks.json")
-            } catch {
-                updateStep(3, status: .failed, detail: "Failed: \(error.localizedDescription)")
+        do {
+            let existingData = fm.contents(atPath: hooksJsonPath)
+            let existingJson: [String: Any]
+            if let existingData {
+                existingJson = try JSONSerialization.jsonObject(with: existingData) as? [String: Any] ?? [:]
+            } else {
+                existingJson = [:]
             }
+
+            let mergedJson = try Self.mergingCodexHooks(into: existingJson)
+            if existingData != nil,
+               Self.canonicalJSON(existingJson) == Self.canonicalJSON(mergedJson) {
+                updateStep(3, status: .passed)
+            } else {
+                let output = try JSONSerialization.data(withJSONObject: mergedJson, options: [.prettyPrinted, .sortedKeys])
+                try output.write(to: URL(fileURLWithPath: hooksJsonPath))
+                updateStep(3, status: .installed, detail: "Hooks written to hooks.json")
+            }
+        } catch {
+            updateStep(3, status: .failed, detail: "Failed: \(error.localizedDescription)")
         }
 
         // Step 5: State file
@@ -545,6 +543,73 @@ struct SetupWizardView: View {
             return nil
         }
         return String(data: data, encoding: .utf8)
+    }
+
+    private static var codexHookCommands: Set<String> {
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        let script = "\(home)/.claude/moonside_hooks/moonside_codex_hook.sh"
+        return [
+            "bash ~/.claude/moonside_hooks/moonside_codex_hook.sh",
+            "/bin/bash ~/.claude/moonside_hooks/moonside_codex_hook.sh",
+            "bash \(script)",
+            "/bin/bash \(script)",
+            "bash \"\(script)\"",
+            "/bin/bash \"\(script)\"",
+            "bash '\(script)'",
+            "/bin/bash '\(script)'",
+        ]
+    }
+
+    private static func containsMoonsideCodexHook(_ object: Any) -> Bool {
+        if let dictionary = object as? [String: Any] {
+            if let command = dictionary["command"] as? String,
+               codexHookCommands.contains(command) {
+                return true
+            }
+            return dictionary.values.contains(where: containsMoonsideCodexHook)
+        }
+        if let array = object as? [Any] {
+            return array.contains(where: containsMoonsideCodexHook)
+        }
+        return false
+    }
+
+    private static func mergingCodexHooks(into existingJson: [String: Any]) throws -> [String: Any] {
+        let templateData = codexHooksJSON.data(using: .utf8)!
+        let templateJson = try JSONSerialization.jsonObject(with: templateData) as! [String: Any]
+        let requiredHooks = templateJson["hooks"] as! [String: Any]
+
+        var result = existingJson
+        var hooks = result["hooks"] as? [String: Any] ?? [:]
+
+        // Drop an obsolete no-op event only when every registered handler is
+        // ours. Keeping mixed events preserves foreign handler trust indexes.
+        for event in ["SessionStart", "PreToolUse", "PostToolUse"] {
+            guard let entries = hooks[event] as? [Any] else { continue }
+            if !entries.isEmpty && entries.allSatisfy({ entry in
+                guard let dictionary = entry as? [String: Any],
+                      let handlers = dictionary["hooks"] as? [Any],
+                      !handlers.isEmpty else { return false }
+                return handlers.allSatisfy(containsMoonsideCodexHook)
+            }) {
+                hooks.removeValue(forKey: event)
+            }
+        }
+
+        // Preserve every existing group and handler index. If our registration
+        // is missing, append it after foreign entries so their trust keys stay
+        // valid.
+        for (event, value) in requiredHooks {
+            let requiredEntries = value as? [Any] ?? []
+            var entries = hooks[event] as? [Any] ?? []
+            if !entries.contains(where: containsMoonsideCodexHook) {
+                entries.append(contentsOf: requiredEntries)
+            }
+            hooks[event] = entries
+        }
+
+        result["hooks"] = hooks
+        return result
     }
 
     private func updateStep(_ index: Int, status: SetupStep.StepStatus, detail: String? = nil) {
@@ -735,61 +800,317 @@ struct SetupWizardView: View {
 
     static let codexHookScriptContent = #"""
     #!/usr/bin/env bash
-    # Moonside LED hook for OpenAI Codex (per-session aware).
-    # Codex hooks receive JSON on stdin and return JSON on stdout.
-    # Always exits 0 so it can never block Codex.
+    # Moonside hook entry point for persisted, user-facing Codex sessions.
+    # Always exits 0 so a lamp integration can never block Codex.
 
-    MOONSIDE_CODEX_HOOK_VERSION=3
+    MOONSIDE_CODEX_HOOK_VERSION=5
 
-    IFS= read -r -d '' INPUT 2>/dev/null || true
+    IFS= read -r -d '' PAYLOAD 2>/dev/null || true
+    printf '%s' "$PAYLOAD" \
+      | /bin/bash "$HOME/.claude/moonside_hooks/moonside_codex_state.sh" hook \
+          >/dev/null 2>&1 \
+      || true
 
-    EVENT=""
-    if [[ "$INPUT" =~ \"hook_event_name\"[[:space:]]*:[[:space:]]*\"([^\"]+)\" ]]; then
-      EVENT="${BASH_REMATCH[1]}"
+    exit 0
+    """#
+
+    static let codexNotifyScriptContent = #"""
+    #!/usr/bin/env bash
+    # Moonside notify entry point for completed Codex turns.
+    # Always exits 0 so a lamp integration can never block Codex.
+
+    MOONSIDE_CODEX_NOTIFY_VERSION=5
+
+    PAYLOAD="$*"
+    if [ -z "$PAYLOAD" ] && [ ! -t 0 ]; then
+      IFS= read -r -d '' PAYLOAD 2>/dev/null || true
     fi
 
-    # Prefer the current thread identifier so the hook and Codex notify command
-    # update the same per-session bucket. Keep legacy identifiers for older payloads.
+    printf '%s' "$PAYLOAD" \
+      | /bin/bash "$HOME/.claude/moonside_hooks/moonside_codex_state.sh" notify \
+          >/dev/null 2>&1 \
+      || true
+
+    exit 0
+    """#
+
+    static let codexStateScriptContent = #"""
+    #!/usr/bin/env bash
+    # Serialized state coordinator for persisted, user-facing Codex sessions.
+    # Payloads arrive on stdin. No payload or identifier is logged.
+
+    MOONSIDE_CODEX_STATE_VERSION=5
+
+    MODE="${1:-}"
+    LOCKED="${2:-}"
+    LOCK_FILE="/tmp/moonside_cx.lock"
+    BUCKET_DIR="/tmp/moonside_cx.d"
+    TURN_DIR="/tmp/moonside_cx.turns"
+    STATE_FILE="/tmp/moonside_cx"
+    DB_PATH="${CODEX_HOME:-$HOME/.codex}/state_5.sqlite"
+
+    case "$MODE" in hook|notify) ;; *) exit 0 ;; esac
+    IFS= read -r -d '' PAYLOAD 2>/dev/null || true
+
+    # lockf owns the kernel lock for the whole parse, validate, prune, mutate and
+    # aggregate transaction. A pre-start timeout leaves state untouched, and the
+    # kernel releases the lock whenever the coordinator exits or crashes.
+    if [ "$LOCKED" != "--locked" ]; then
+      printf '%s' "$PAYLOAD" \
+        | /usr/bin/lockf -k -t 2 "$LOCK_FILE" /bin/bash "$0" "$MODE" --locked \
+            >/dev/null 2>&1 \
+        || true
+      exit 0
+    fi
+
+    json_string() {
+      printf '%s' "$PAYLOAD" \
+        | /usr/bin/plutil -extract "$1" raw -expect string -n -o - - 2>/dev/null
+    }
+
+    has_key() {
+      printf '%s' "$PAYLOAD" | /usr/bin/plutil -type "$1" - >/dev/null 2>&1
+    }
+
+    is_safe_id() {
+      case "$1" in
+        ""|*[!A-Za-z0-9_-]*) return 1 ;;
+        *) return 0 ;;
+      esac
+    }
+
+    read_hook_sid() {
+      if has_key session_id; then
+        SID="$(json_string session_id)"
+      elif has_key thread_id; then
+        SID="$(json_string thread_id)"
+      elif has_key thread-id; then
+        SID="$(json_string thread-id)"
+      elif has_key conversation_id; then
+        SID="$(json_string conversation_id)"
+      fi
+    }
+
+    read_notify_sid() {
+      if has_key thread-id; then
+        SID="$(json_string thread-id)"
+      elif has_key thread_id; then
+        SID="$(json_string thread_id)"
+      elif has_key session_id; then
+        SID="$(json_string session_id)"
+      elif has_key conversation_id; then
+        SID="$(json_string conversation_id)"
+      fi
+    }
+
+    read_turn_id() {
+      TURN_PRESENT=0
+      if has_key turn_id; then
+        TURN_PRESENT=1
+        TURN_ID="$(json_string turn_id)"
+      elif has_key turn-id; then
+        TURN_PRESENT=1
+        TURN_ID="$(json_string turn-id)"
+      fi
+    }
+
+    load_user_ids() {
+      DB_READ_OK=0
+      ROOT_IDS=""
+      ACTIVE_USER_IDS=""
+      [ -f "$DB_PATH" ] || return 1
+      local rows id active
+      rows="$(/usr/bin/sqlite3 -batch -noheader -readonly "$DB_PATH" \
+          "SELECT id, CASE WHEN COALESCE(archived, 0) = 0 THEN 1 ELSE 0 END
+             FROM threads
+            WHERE thread_source = 'user'
+               OR (thread_source IS NULL AND source = 'vscode');" 2>/dev/null)" \
+        || return 1
+
+      while IFS='|' read -r id active; do
+        is_safe_id "$id" || continue
+        ROOT_IDS="${ROOT_IDS}${ROOT_IDS:+$'\n'}${id}"
+        if [ "$active" = 1 ]; then
+          ACTIVE_USER_IDS="${ACTIVE_USER_IDS}${ACTIVE_USER_IDS:+$'\n'}${id}"
+        fi
+      done <<< "$rows"
+      DB_READ_OK=1
+      return 0
+    }
+
+    id_in_list() {
+      local wanted="$1" ids="$2" candidate
+      while IFS= read -r candidate; do
+        [ "$candidate" = "$wanted" ] && return 0
+      done <<< "$ids"
+      return 1
+    }
+
+    is_persisted_root() { id_in_list "$1" "$ROOT_IDS"; }
+    is_active_root() { id_in_list "$1" "$ACTIVE_USER_IDS"; }
+
+    atomic_write() {
+      local destination="$1" value="$2" temporary="${1}.tmp.$$"
+      if printf '%s' "$value" > "$temporary" 2>/dev/null \
+          && /bin/mv -f "$temporary" "$destination" 2>/dev/null; then
+        return 0
+      fi
+      /bin/rm -f "$temporary" 2>/dev/null
+      return 1
+    }
+
+    prune_orphans() {
+      local file sid
+      [ "$DB_READ_OK" = 1 ] || return 0
+
+      for file in "$BUCKET_DIR"/*; do
+        [ -f "$file" ] || continue
+        sid="${file##*/}"
+        if ! is_active_root "$sid"; then
+          /bin/rm -f "$file" "$TURN_DIR/$sid" 2>/dev/null
+        fi
+      done
+
+      for file in "$TURN_DIR"/*; do
+        [ -f "$file" ] || continue
+        sid="${file##*/}"
+        if ! is_active_root "$sid" || [ ! -f "$BUCKET_DIR/$sid" ]; then
+          /bin/rm -f "$file" 2>/dev/null
+        fi
+      done
+    }
+
+    aggregate() {
+      local file state had_input=0 had_working=0 had_idle=0 token
+      for file in "$BUCKET_DIR"/*; do
+        [ -f "$file" ] || continue
+        state="$(<"$file")"
+        case "$state" in
+          input) had_input=1 ;;
+          working) had_working=1 ;;
+          idle) had_idle=1 ;;
+        esac
+      done
+
+      if [ "$had_input" = 1 ]; then
+        token=input_cx
+      elif [ "$had_working" = 1 ]; then
+        token=working_cx
+      elif [ "$had_idle" = 1 ]; then
+        token=idle
+      else
+        token=off
+      fi
+      printf '%s' "$token" > "$STATE_FILE" 2>/dev/null
+    }
+
+    ACTION=""
     SID=""
-    if [[ "$INPUT" =~ \"thread_id\"[[:space:]]*:[[:space:]]*\"([^\"]+)\" ]]; then
-      SID="${BASH_REMATCH[1]}"
-    elif [[ "$INPUT" =~ \"thread-id\"[[:space:]]*:[[:space:]]*\"([^\"]+)\" ]]; then
-      SID="${BASH_REMATCH[1]}"
-    elif [[ "$INPUT" =~ \"session_id\"[[:space:]]*:[[:space:]]*\"([^\"]+)\" ]]; then
-      SID="${BASH_REMATCH[1]}"
-    elif [[ "$INPUT" =~ \"conversation_id\"[[:space:]]*:[[:space:]]*\"([^\"]+)\" ]]; then
-      SID="${BASH_REMATCH[1]}"
+    TURN_ID=""
+    TURN_PRESENT=0
+    DB_READ_OK=0
+    ROOT_IDS=""
+    ACTIVE_USER_IDS=""
+
+    if [ "$MODE" = hook ]; then
+      EVENT="$(json_string hook_event_name)"
+      case "$EVENT" in
+        UserPromptSubmit) ACTION=start ;;
+        Stop|Interrupt) ACTION=complete ;;
+        SessionEnd) ACTION=end ;;
+        SessionStart|PreToolUse|PostToolUse) exit 0 ;;
+        *) exit 0 ;;
+      esac
+      read_hook_sid
+    else
+      TYPE="$(json_string type)"
+      [ "$TYPE" = agent-turn-complete ] || exit 0
+      ACTION=complete
+      read_notify_sid
     fi
 
-    case "$EVENT" in
-      SessionStart|Stop) CAT=idle ;;
-      UserPromptSubmit)  CAT=working ;;
-      PreToolUse|PostToolUse) exit 0 ;;
-      *) exit 0 ;;
-    esac
+    is_safe_id "$SID" || exit 0
+    if [ "$ACTION" != end ]; then
+      read_turn_id
+      if [ "$TURN_PRESENT" = 1 ]; then
+        is_safe_id "$TURN_ID" || exit 0
+      fi
+    fi
 
-    # Without an identifier there is no safe per-session bucket to update.
-    [ -n "$SID" ] || exit 0
+    BUCKET="$BUCKET_DIR/$SID"
+    TURN_FILE="$TURN_DIR/$SID"
 
-    source "$HOME/.claude/moonside_hooks/moonside_resolve.sh"
-    MS_SID="$SID" MS_CAT="$CAT" moonside_resolve cx
+    if [ "$ACTION" = start ]; then
+      # A start is accepted only for a persisted root conversation. Ephemeral
+      # internals and subagents have no matching user row and remain invisible.
+      load_user_ids || exit 0
+      is_active_root "$SID" || exit 0
+      /bin/mkdir -p "$BUCKET_DIR" "$TURN_DIR" 2>/dev/null || exit 0
+      prune_orphans
 
-    echo ""
+      if [ "$TURN_PRESENT" = 1 ]; then
+        atomic_write "$TURN_FILE" "$TURN_ID" || exit 0
+      else
+        # Legacy starts without a turn id can only be completed by a matching
+        # legacy completion. They cannot safely protect against delayed events.
+        /bin/rm -f "$TURN_FILE" 2>/dev/null
+      fi
+      atomic_write "$BUCKET" working || exit 0
+      aggregate
+      exit 0
+    fi
+
+    if [ "$ACTION" = end ]; then
+      if [ ! -f "$BUCKET" ]; then
+        load_user_ids || exit 0
+        is_persisted_root "$SID" || exit 0
+      fi
+      /bin/rm -f "$BUCKET" "$TURN_FILE" 2>/dev/null
+      if [ "$DB_READ_OK" != 1 ]; then
+        load_user_ids || true
+      fi
+      prune_orphans
+      aggregate
+      exit 0
+    fi
+
+    # Turn completions never create a bucket. A bucket proves an earlier start
+    # was accepted; database failure therefore does not prevent safe completion.
+    if [ ! -f "$BUCKET" ]; then
+      load_user_ids || exit 0
+      is_persisted_root "$SID" || exit 0
+      prune_orphans
+      aggregate
+      exit 0
+    fi
+    if [ -f "$TURN_FILE" ]; then
+      [ "$TURN_PRESENT" = 1 ] || exit 0
+      CURRENT_TURN="$(<"$TURN_FILE")"
+      [ "$CURRENT_TURN" = "$TURN_ID" ] || exit 0
+    fi
+
+    # Buckets migrated from v3 have no turn sidecar. Their completion is accepted
+    # with or without a turn id, but legacy events have no ordering guarantee.
+    if load_user_ids; then
+      prune_orphans
+      if [ ! -f "$BUCKET" ]; then
+        aggregate
+        exit 0
+      fi
+    fi
+
+    atomic_write "$BUCKET" idle || exit 0
+    aggregate
     exit 0
     """#
 
     static let codexHooksJSON = """
     {
       "hooks": {
-        "SessionStart": [{"hooks": [{"type": "command", "command": "bash ~/.claude/moonside_hooks/moonside_codex_hook.sh", "timeout": 5}]}],
         "UserPromptSubmit": [{"hooks": [{"type": "command", "command": "bash ~/.claude/moonside_hooks/moonside_codex_hook.sh", "timeout": 5}]}],
-        "PreToolUse": [
-          {"matcher": "Bash", "hooks": [{"type": "command", "command": "bash ~/.claude/moonside_hooks/moonside_codex_hook.sh", "timeout": 5}]},
-          {"matcher": "Read", "hooks": [{"type": "command", "command": "bash ~/.claude/moonside_hooks/moonside_codex_hook.sh", "timeout": 5}]},
-          {"matcher": "Write", "hooks": [{"type": "command", "command": "bash ~/.claude/moonside_hooks/moonside_codex_hook.sh", "timeout": 5}]},
-          {"matcher": "Edit", "hooks": [{"type": "command", "command": "bash ~/.claude/moonside_hooks/moonside_codex_hook.sh", "timeout": 5}]}
-        ],
-        "Stop": [{"hooks": [{"type": "command", "command": "bash ~/.claude/moonside_hooks/moonside_codex_hook.sh", "timeout": 5}]}]
+        "Stop": [{"hooks": [{"type": "command", "command": "bash ~/.claude/moonside_hooks/moonside_codex_hook.sh", "timeout": 5}]}],
+        "Interrupt": [{"hooks": [{"type": "command", "command": "bash ~/.claude/moonside_hooks/moonside_codex_hook.sh", "timeout": 3}]}],
+        "SessionEnd": [{"hooks": [{"type": "command", "command": "bash ~/.claude/moonside_hooks/moonside_codex_hook.sh", "timeout": 3}]}]
       }
     }
     """

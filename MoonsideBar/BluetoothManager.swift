@@ -3,6 +3,32 @@ import CoreBluetooth
 import Defaults
 import Foundation
 
+// TESTABLE-BEGIN: CommandReplayScheduler
+final class CommandReplayScheduler {
+    private var generation: UInt = 0
+
+    func cancelPending() {
+        generation &+= 1
+    }
+
+    func schedule(
+        _ commands: [String],
+        spacing: TimeInterval,
+        perform: @escaping (String) -> Void
+    ) {
+        generation &+= 1
+        let scheduledGeneration = generation
+
+        for (index, command) in commands.enumerated() {
+            DispatchQueue.main.asyncAfter(deadline: .now() + Double(index) * spacing) { [weak self] in
+                guard self?.generation == scheduledGeneration else { return }
+                perform(command)
+            }
+        }
+    }
+}
+// TESTABLE-END: CommandReplayScheduler
+
 final class BluetoothManager: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
 
     // MARK: - NUS UUIDs
@@ -27,6 +53,7 @@ final class BluetoothManager: NSObject, CBCentralManagerDelegate, CBPeripheralDe
     private var uuidConnectAttempts = 0
     private let maxUUIDConnectAttempts = 3
     private var commandQueue: [String] = []
+    private let commandReplay = CommandReplayScheduler()
 
     // MARK: - Init
 
@@ -39,6 +66,10 @@ final class BluetoothManager: NSObject, CBCentralManagerDelegate, CBPeripheralDe
     // MARK: - Public
 
     func send(_ command: String) {
+        // A live state update is newer than every command captured by an offline
+        // replay, so no delayed replay command may run after it.
+        commandReplay.cancelPending()
+
         guard let peripheral, let rx = rxCharacteristic,
               peripheral.state == .connected else {
             // Queue command for when we reconnect. Compact right away so the
@@ -215,17 +246,15 @@ final class BluetoothManager: NSObject, CBCentralManagerDelegate, CBPeripheralDe
         compactQueue()
         let queued = commandQueue
         commandQueue.removeAll()
-        for (index, command) in queued.enumerated() {
-            // Stagger the replayed writes slightly so the burst doesn't overrun
-            // the lamp's BLE buffer (writes are mostly write-without-response).
-            DispatchQueue.main.asyncAfter(deadline: .now() + Double(index) * 0.06) { [weak self] in
-                guard let self, let peripheral = self.peripheral, let rx = self.rxCharacteristic,
-                      peripheral.state == .connected,
-                      let data = command.data(using: .utf8) else { return }
-                let writeType: CBCharacteristicWriteType = rx.properties.contains(.writeWithoutResponse)
-                    ? .withoutResponse : .withResponse
-                peripheral.writeValue(data, for: rx, type: writeType)
-            }
+        // Stagger the replayed writes slightly so the burst doesn't overrun the
+        // lamp's BLE buffer. Any newer live send invalidates the remaining work.
+        commandReplay.schedule(queued, spacing: 0.06) { [weak self] command in
+            guard let self, let peripheral = self.peripheral, let rx = self.rxCharacteristic,
+                  peripheral.state == .connected,
+                  let data = command.data(using: .utf8) else { return }
+            let writeType: CBCharacteristicWriteType = rx.properties.contains(.writeWithoutResponse)
+                ? .withoutResponse : .withResponse
+            peripheral.writeValue(data, for: rx, type: writeType)
         }
     }
 
@@ -309,7 +338,10 @@ final class BluetoothManager: NSObject, CBCentralManagerDelegate, CBPeripheralDe
             return
         }
         rxCharacteristic = rx
-        onConnectionStatusChanged?(.connected)
+        // Capture offline history first. The synchronous connected callback then
+        // reapplies currentState through send(), invalidating this replay before
+        // any delayed historical command can overtake the current state.
         flushQueue()
+        onConnectionStatusChanged?(.connected)
     }
 }
